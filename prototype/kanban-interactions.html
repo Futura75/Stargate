@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stargate — kanban interactions prototype (throwaway)</title>
+<!--
+  PROTOTYPE (throwaway) — wayfinder ticket #5 "Prototype: kanban board interactions".
+  Three radically different interaction models for the per-workspace kanban, hosted inside the
+  settled variant-D shell (ticket #4 verdict). Switchable via ?variant=K1|K2|K3, the bottom bar,
+  or the ← / → keys. Each variant implements the FULL interaction set the ticket asks about:
+    - add / edit / delete tasks (title + optional notes + optional due date)
+    - add / rename / reorder / delete columns (default Todo / In Progress / Done)
+    - move tasks between columns with drag & drop
+    - visual density appropriate for a homepage glance
+  K1 "Inline"        — the board IS the editor: everything editable in place, compact density.
+  K2 "Glance + drawer"— board shows glance cards only; editing happens in a right-side drawer.
+  K3 "Composer + popover" — quick-add composer bar on top; cards/columns edit in anchored popovers.
+  In-memory state only (no persistence on purpose). The State inspector (bottom-right) shows the
+  live kanban JSON — the exact shape ticket #6 will encode.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; overflow-x: hidden;
+         --bg:#eceee7; --surface:#fbfcf9; --ink:#262b24; --ink-soft:#5d6659; --line:#d8ddd0;
+         --accent:#5f7161; --accent-ink:#fbfcf9; --honey:#b4884e; --radius:14px;
+         --shadow:0 1px 2px rgba(38,43,36,.06), 0 4px 14px rgba(38,43,36,.07);
+         background:var(--bg); color:var(--ink); }
+  body[data-resolved="dark"] {
+         --bg:#1c201b; --surface:#252a24; --ink:#e4e7de; --ink-soft:#a3ab9d; --line:#343b32;
+         --accent:#9db39a; --accent-ink:#1c201b; --honey:#d9a95f;
+         --shadow:0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25); }
+  button { font: inherit; cursor: pointer; }
+  input, textarea, select { font: inherit; color: var(--ink); }
+
+  /* ===== settled variant-D shell (from ticket #4) ===== */
+  .d-top { display:flex; align-items:center; gap:8px; padding:10px 18px; flex-wrap:wrap;
+           border-bottom:1px solid var(--line); background:color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: blur(8px); }
+  .d-tab { display:flex; align-items:center; gap:7px; border:1px solid var(--line); background:transparent; color:var(--ink-soft);
+           border-radius:999px; padding:5px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .d-tab.active { background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+  .d-top .spacer { flex:1; }
+  .d-pill { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:999px; padding:6px 13px; font-size:13px; box-shadow:var(--shadow); }
+  .d-viewseg { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; box-shadow:var(--shadow); }
+  .d-viewseg button { border:none; background:var(--surface); color:var(--ink-soft); padding:6px 16px; font-size:13px; font-weight:600; }
+  .d-viewseg button.sel { background:var(--accent); color:var(--accent-ink); }
+  .d-toolbar { display:flex; gap:12px; padding:14px clamp(16px,3vw,40px) 4px; }
+  .d-searchbox { flex:1; display:flex; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .d-searchbox input { flex:1; border:none; outline:none; background:transparent; color:var(--ink); padding:11px 16px; font-size:15px; }
+  .d-searchbox select { border:none; border-left:1px solid var(--line); background:var(--bg); color:var(--ink-soft); padding:8px; font-size:13px; }
+  .d-searchbox button { border:none; background:var(--accent); color:var(--accent-ink); padding:0 22px; font-weight:700; }
+  .d-main { padding:16px clamp(16px,3vw,40px) 96px; }
+
+  .iconbtn { border:none; background:none; color:var(--ink-soft); font-size:13px; padding:2px 6px; border-radius:6px; }
+  .iconbtn:hover { background:var(--bg); color:var(--ink); }
+  .due { font-size:11px; padding:2px 8px; border-radius:999px; background:var(--bg); color:var(--ink-soft); border:1px solid var(--line); white-space:nowrap; }
+  .due.over { color:#a5483a; border-color:#d8a0a0; }
+
+  /* ================= K1: Inline ================= */
+  .k1-board { display:flex; gap:14px; align-items:flex-start; }
+  .k1-col { flex:1 1 230px; min-width:210px; max-width:340px; background:color-mix(in srgb, var(--surface) 60%, transparent);
+            border:1px solid var(--line); border-radius:var(--radius); padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .k1-col-head { display:flex; align-items:center; gap:8px; padding:2px 4px; }
+  .k1-col-head h3 { font-size:13px; font-weight:700; color:var(--ink-soft); display:flex; gap:8px; align-items:center; flex:1; }
+  .k1-col-head .count { font-weight:400; opacity:.7; }
+  .k1-col-head input.t { border:1px solid var(--line); border-radius:7px; background:var(--surface); padding:3px 7px; font-size:13px; width:100%; outline:none; }
+  .k1-col-head .del { border:none; background:none; color:var(--ink-soft); opacity:0; transition:opacity .12s; }
+  .k1-col:hover .k1-col-head .del { opacity:1; }
+  .k1-task { background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:8px 10px; font-size:13.5px; }
+  .k1-task .row1 { display:flex; align-items:flex-start; gap:8px; }
+  .k1-task .title { flex:1; font-weight:600; cursor:text; }
+  .k1-task .title.empty { color:var(--ink-soft); font-weight:400; }
+  .k1-task .row2 { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+  .k1-task .notes { flex:1; font-size:12px; color:var(--ink-soft); white-space:pre-wrap; cursor:text; }
+  .k1-task .notes.empty { opacity:.5; font-style:italic; }
+  .k1-task .exp { border:none; background:none; color:var(--ink-soft); font-size:12px; padding:0; }
+  .k1-edit { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; display:flex; flex-direction:column; gap:7px; }
+  .k1-edit textarea { width:100%; border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:6px 8px; font-size:12.5px; min-height:52px; resize:vertical; outline:none; }
+  .k1-edit .row { display:flex; gap:7px; align-items:center; }
+  .k1-edit .row input[type=date] { border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:4px 8px; font-size:12.5px; }
+  .k1-edit .sp { flex:1; }
+  .k1-addform { display:flex; gap:6px; }
+  .k1-addform input { flex:1; border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:6px 9px; font-size:13px; outline:none; }
+  .k1-addform button { border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+  .k1-coladd { flex:0 0 44px; align-self:stretch; min-height:120px; border:1px dashed var(--line); border-radius:var(--radius); background:transparent; color:var(--ink-soft); font-size:20px; }
+  .k1-coladd:hover { border-color:var(--accent); color:var(--accent); }
+  .k1-coladd-form { flex:0 0 200px; display:flex; flex-direction:column; gap:6px; padding:10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+  .k1-coladd-form input { border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:6px 9px; font-size:13px; outline:none; }
+  .k1-coladd-form .row { display:flex; gap:6px; }
+  .k1-coladd-form .row button { flex:1; border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:5px; font-size:12.5px; }
+
+  /* ================= K2: Glance + drawer ================= */
+  .k2-board { display:flex; gap:14px; align-items:flex-start; }
+  .k2-col { flex:1 1 220px; min-width:200px; max-width:320px; background:color-mix(in srgb, var(--surface) 55%, transparent);
+            border:1px solid var(--line); border-radius:var(--radius); padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .k2-col-head { display:flex; align-items:center; gap:8px; padding:2px 4px; }
+  .k2-col-head h3 { font-size:13px; font-weight:700; color:var(--ink-soft); flex:1; display:flex; gap:8px; align-items:center; }
+  .k2-col-head .count { font-weight:400; opacity:.7; }
+  .k2-menu { position:relative; }
+  .k2-task { background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:8px 10px; font-size:13.5px; cursor:pointer; }
+  .k2-task .t { font-weight:600; }
+  .k2-task .meta { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+  .k2-task .hint { font-size:11px; color:var(--ink-soft); opacity:.7; }
+  .k2-add { border:1px dashed var(--line); background:transparent; color:var(--ink-soft); border-radius:9px; padding:6px; font-size:12.5px; width:100%; }
+  .k2-add:hover { border-color:var(--accent); color:var(--accent); }
+  .k2-coladd { flex:0 0 44px; align-self:stretch; min-height:120px; border:1px dashed var(--line); border-radius:var(--radius); background:transparent; color:var(--ink-soft); font-size:20px; }
+  #drawer { position:fixed; top:0; right:0; bottom:0; width:min(360px, 92vw); z-index:80; background:var(--surface);
+            border-left:1px solid var(--line); box-shadow:0 0 40px rgba(0,0,0,.25); transform:translateX(105%); transition:transform .2s ease;
+            display:flex; flex-direction:column; }
+  @media (prefers-reduced-motion: reduce) { #drawer { transition:none; } }
+  #drawer.open { transform:translateX(0); }
+  #drawer .head { display:flex; align-items:center; gap:8px; padding:14px 16px; border-bottom:1px solid var(--line); }
+  #drawer .head h3 { font-size:15px; font-weight:700; }
+  #drawer .head .sp { flex:1; }
+  #drawer .body { flex:1; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  #drawer .body label { font-size:12px; font-weight:700; color:var(--ink-soft); }
+  #drawer .body input, #drawer .body textarea { border:1px solid var(--line); border-radius:9px; background:var(--bg); padding:9px 11px; font-size:14px; width:100%; outline:none; }
+  #drawer .body textarea { min-height:96px; resize:vertical; }
+  #drawer .foot { display:flex; gap:8px; padding:14px 16px; border-top:1px solid var(--line); }
+  #drawer .foot button { border-radius:9px; padding:8px 16px; font-size:13.5px; border:1px solid var(--line); background:var(--surface); }
+  #drawer .foot button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:700; }
+  #drawer .foot button.danger { color:#a5483a; border-color:#d8a0a0; }
+  #drawer .foot .sp { flex:1; }
+
+  /* ================= K3: Composer + popover ================= */
+  .k3-composer { display:flex; gap:8px; align-items:center; padding:0 clamp(16px,3vw,40px) 14px; }
+  .k3-composer input { flex:1; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); padding:10px 14px; font-size:14px; outline:none; }
+  .k3-composer select { border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink-soft); padding:9px 10px; font-size:13px; }
+  .k3-composer button { border:none; background:var(--accent); color:var(--accent-ink); border-radius:10px; padding:10px 20px; font-weight:700; }
+  .k3-board { display:flex; gap:14px; align-items:flex-start; }
+  .k3-col { flex:1 1 230px; min-width:210px; max-width:340px; background:color-mix(in srgb, var(--surface) 60%, transparent);
+            border:1px solid var(--line); border-radius:var(--radius); padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .k3-col-head { display:flex; align-items:center; gap:8px; padding:2px 4px; }
+  .k3-col-head .grip { cursor:grab; color:var(--ink-soft); font-size:15px; letter-spacing:1px; }
+  .k3-col-head h3 { font-size:13px; font-weight:700; color:var(--ink-soft); flex:1; display:flex; gap:8px; align-items:center; }
+  .k3-col-head .count { font-weight:400; opacity:.7; }
+  .k3-task { background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:8px 10px; font-size:13.5px; }
+  .k3-task .t { font-weight:600; cursor:pointer; }
+  .k3-task .notes { font-size:12px; color:var(--ink-soft); margin-top:4px; white-space:pre-wrap; }
+  .k3-task .meta { display:flex; gap:6px; align-items:center; margin-top:6px; }
+  .k3-coladd { flex:0 0 44px; align-self:stretch; min-height:120px; border:1px dashed var(--line); border-radius:var(--radius); background:transparent; color:var(--ink-soft); font-size:20px; }
+
+  /* shared popover + menu */
+  .pop { position:fixed; z-index:70; background:var(--surface); border:1px solid var(--line); border-radius:12px;
+         box-shadow:0 12px 34px rgba(0,0,0,.28); padding:12px; width:264px; color:var(--ink); }
+  .pop h4 { font-size:13px; margin-bottom:9px; color:var(--ink-soft); font-weight:700; }
+  .pop label { display:block; font-size:11px; font-weight:700; color:var(--ink-soft); margin:8px 0 3px; }
+  .pop input, .pop textarea { width:100%; border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:6px 8px; font-size:13px; outline:none; }
+  .pop textarea { min-height:56px; resize:vertical; }
+  .pop .row { display:flex; gap:6px; margin-top:10px; }
+  .pop .row button { flex:1; border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:6px; font-size:12.5px; }
+  .pop .row button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:700; }
+  .pop .row button.danger { color:#a5483a; border-color:#d8a0a0; }
+  .menu { position:fixed; z-index:75; background:var(--surface); border:1px solid var(--line); border-radius:11px; box-shadow:0 12px 34px rgba(0,0,0,.28); padding:6px; min-width:170px; color:var(--ink); }
+  .menu button { display:block; width:100%; text-align:left; border:none; background:none; padding:7px 11px; border-radius:7px; font-size:13px; color:var(--ink); }
+  .menu button:hover { background:var(--bg); }
+  .menu button.danger { color:#a5483a; }
+
+  /* inspector + switcher */
+  #inspector { position:fixed; right:12px; bottom:64px; z-index:70; width:min(400px, 92vw); max-height:52vh; overflow:auto;
+               background:rgba(16,18,24,.92); color:#c9d4e3; border:1px solid rgba(255,255,255,.14); border-radius:12px;
+               font:11.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; padding:12px; display:none; white-space:pre-wrap; word-break:break-all; }
+  #inspector.open { display:block; }
+  #inspector .tag { color:#7fb3d3; font-weight:700; display:block; margin-bottom:6px; font-family:ui-sans-serif,system-ui; }
+  #switcher { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:90; display:flex; align-items:center; gap:4px;
+              background:#10131a; color:#e8ecf3; border:1px solid rgba(255,255,255,.2); border-radius:999px; padding:6px 8px;
+              box-shadow:0 8px 28px rgba(0,0,0,.4); font-size:13px; }
+  #switcher button { background:none; border:none; color:#e8ecf3; font-size:16px; padding:4px 10px; border-radius:999px; }
+  #switcher button:hover { background:rgba(255,255,255,.14); }
+  #switcher .label { padding:0 8px; font-weight:700; white-space:nowrap; }
+  #switcher .label small { font-weight:400; opacity:.7; }
+
+  .dragover { outline:2px dashed var(--accent); outline-offset:2px; border-radius:8px; }
+  [draggable="true"] { cursor:grab; }
+  [draggable="true"]:active { cursor:grabbing; }
+  .dragging { opacity:.4; }
+</style>
+</head>
+<body data-variant="K1" data-theme="system" data-resolved="light">
+<div id="app"></div>
+<div id="drawer"></div>
+<div id="inspector"><span class="tag">STATE INSPECTOR (live, in-memory only)</span><span id="inspector-json"></span></div>
+<div id="switcher">
+  <button id="sw-prev" title="Previous variant (←)">◀</button>
+  <span class="label" id="sw-label"></span>
+  <button id="sw-next" title="Next variant (→)">▶</button>
+</div>
+<script>
+"use strict";
+/* ================= state (in-memory only) ================= */
+const uid = () => Math.random().toString(36).slice(2, 9);
+const today = new Date().toISOString().slice(0, 10);
+
+const state = {
+  variant: "K1",
+  theme: "system",
+  search: { engine: "google" },
+  activeWorkspace: "w1",
+  workspaces: [
+    { id: "w1", name: "Personal", icon: "🏠", color: "#5f7161",
+      kanban: { columns: [
+        { id: "c1", title: "Todo", tasks: [
+          { id: "t1", title: "Write the v1 spec", notes: "", due: "" },
+          { id: "t2", title: "Book dentist", notes: "ask about evening slots", due: "2026-10-20" },
+        ]},
+        { id: "c2", title: "In Progress", tasks: [
+          { id: "t3", title: "Prototype the kanban", notes: "three interaction models for ticket #5", due: "2026-10-12" },
+        ]},
+        { id: "c3", title: "Done", tasks: [
+          { id: "t4", title: "Pick the stack", notes: "Vite + Svelte + TypeScript", due: "" },
+        ]},
+      ]},
+    },
+    { id: "w2", name: "Work", icon: "🧪", color: "#2e6da3",
+      kanban: { columns: [
+        { id: "c4", title: "Todo", tasks: [ { id: "t5", title: "Review open PRs", notes: "", due: "" } ] },
+        { id: "c5", title: "In Progress", tasks: [] },
+        { id: "c6", title: "Done", tasks: [] },
+      ]},
+    },
+  ],
+};
+const ws = () => state.workspaces.find(w => w.id === state.activeWorkspace);
+const findKcol = id => ws().kanban.columns.find(c => c.id === id);
+const findTask = id => { for (const c of ws().kanban.columns) { const t = c.tasks.find(x => x.id === id); if (t) return { c, t }; } return null; };
+
+/* ================= theme ================= */
+const mql = matchMedia("(prefers-color-scheme: dark)");
+function resolveTheme() {
+  const resolved = state.theme === "system" ? (mql.matches ? "dark" : "light") : state.theme;
+  document.body.dataset.resolved = resolved;
+}
+mql.addEventListener("change", () => { if (state.theme === "system") resolveTheme(); });
+
+/* ================= small render helpers ================= */
+function dueChip(t) {
+  if (!t.due) return "";
+  const over = t.due < today;
+  const d = new Date(t.due + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `<span class="due ${over ? "over" : ""}">📅 ${d}</span>`;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const hasNotes = t => !!t.notes;
+
+/* ================= header (settled shell, shared by all three) ================= */
+function headerHtml() {
+  const w = ws();
+  return `<header class="d-top">
+    ${state.workspaces.map(x => `<span class="d-tab ${x.id===w.id?"active":""}" role="button" tabindex="0" data-ws="${x.id}">${x.icon} ${esc(x.name)}</span>`).join("")}
+    <div class="spacer"></div>
+    <div class="d-viewseg">${[["links","🔖 Links"],["kanban","📋 Kanban"]].map(([v,l]) => `<button data-view="${v}" class="${state.view===v?"sel":""}">${l}</button>`).join("")}</div>
+    <button class="d-pill" data-cycle-theme>${ {light:"☀️ Light",dark:"🌙 Dark",system:"🌗 System"}[state.theme] }</button>
+    <button class="d-pill" data-inspector title="Live state JSON">{ } State</button>
+  </header>
+  <div class="d-toolbar">
+    <form class="d-searchbox" data-search>
+      <input placeholder="Search the web…" aria-label="Search">
+      <select data-engine>${["google","ddg","bing"].map(e => `<option value="${e}" ${state.search?.engine===e?"selected":""}>${{google:"Google",ddg:"DuckDuckGo",bing:"Bing"}[e]}</option>`).join("")}</select>
+      <button type="submit">Search</button>
+    </form>
+  </div>`;
+}
+
+/* ================= K1: Inline ================= */
+function renderK1() {
+  const w = ws();
+  return `<div class="k1-board">
+    ${w.kanban.columns.map((c, ci) => `<section class="k1-col" data-kcol="${c.id}" data-drop="kcol:${c.id}">
+      <div class="k1-col-head" draggable="true" data-drag-type="kcol" data-id="${c.id}" data-drag='${JSON.stringify({type:"kcol",id:c.id})}'>
+        <h3><span class="k1-title" data-kcol-title="${c.id}">${esc(c.title)}</span> <span class="count">${c.tasks.length}</span></h3>
+        <button class="del" data-del-kcol="${c.id}" title="Delete column">✕</button>
+      </div>
+      ${c.tasks.map(t => `<article class="k1-task" draggable="true" data-drag-type="task" data-id="${t.id}"
+          data-drag='${JSON.stringify({type:"task",id:t.id,from:c.id})}'>
+        <div class="row1"><span class="title" data-edit-title="${t.id}">${esc(t.title)}</span></div>
+        <div class="row2">${dueChip(t)}
+          <span class="notes ${hasNotes(t)?"":"empty"}" data-edit-notes="${t.id}">${hasNotes(t) ? esc(t.notes) : "+ note"}</span>
+          <button class="exp" data-toggle-edit="${t.id}" title="Edit">✎</button>
+        </div>
+      </article>`).join("")}
+      <form class="k1-addform" data-add-task data-col="${c.id}"><input placeholder="Add task…"><button>＋</button></form>
+    </section>`).join("")}
+    <button class="k1-coladd" data-add-kcol title="Add column">＋</button>
+  </div>`;
+}
+
+/* ================= K2: Glance + drawer ================= */
+function renderK2() {
+  const w = ws();
+  return `<div class="k2-board">
+    ${w.kanban.columns.map((c, ci) => `<section class="k2-col" data-kcol="${c.id}" data-drop="kcol:${c.id}">
+      <div class="k2-col-head">
+        <h3>${esc(c.title)} <span class="count">${c.tasks.length}</span></h3>
+        <span class="k2-menu"><button class="iconbtn" data-col-menu="${c.id}" title="Column menu">⋯</button></span>
+      </div>
+      ${c.tasks.map(t => `<article class="k2-task" data-open-task="${t.id}" draggable="true" data-drag-type="task" data-id="${t.id}"
+          data-drag='${JSON.stringify({type:"task",id:t.id,from:c.id})}'>
+        <div class="t">${esc(t.title)}</div>
+        <div class="meta">${dueChip(t)}${hasNotes(t) ? `<span class="hint">📝 note</span>` : ""}</div>
+      </article>`).join("")}
+      <button class="k2-add" data-add-task="${c.id}">＋ Add task</button>
+    </section>`).join("")}
+    <button class="k2-coladd" data-add-kcol title="Add column">＋</button>
+  </div>`;
+}
+
+/* ================= K3: Composer + popover ================= */
+function renderK3() {
+  const w = ws();
+  return `<div class="k3-composer">
+    <input id="k3-composer-input" placeholder="Add task… (Enter adds to the chosen column)">
+    <select id="k3-composer-col">${w.kanban.columns.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join("")}</select>
+    <button id="k3-composer-add">Add</button>
+  </div>
+  <div class="k3-board">
+    ${w.kanban.columns.map((c, ci) => `<section class="k3-col" data-kcol="${c.id}" data-drop="kcol:${c.id}">
+      <div class="k3-col-head">
+        <span class="grip" draggable="true" data-drag-type="kcol" data-id="${c.id}" data-drag='${JSON.stringify({type:"kcol",id:c.id})}' title="Drag to reorder">⠿</span>
+        <h3>${esc(c.title)} <span class="count">${c.tasks.length}</span></h3>
+        <button class="iconbtn" data-col-menu="${c.id}" title="Column menu">⋯</button>
+      </div>
+      ${c.tasks.map(t => `<article class="k3-task" draggable="true" data-drag-type="task" data-id="${t.id}"
+          data-drag='${JSON.stringify({type:"task",id:t.id,from:c.id})}'>
+        <div class="t" data-open-task="${t.id}" title="Edit">${esc(t.title)}</div>
+        ${hasNotes(t) ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+        <div class="meta">${dueChip(t)}</div>
+      </article>`).join("")}
+    </section>`).join("")}
+    <button class="k3-coladd" data-add-kcol title="Add column">＋</button>
+  </div>`;
+}
+
+/* ================= root render ================= */
+function render() {
+  resolveTheme();
+  state.view = state.view || "kanban";
+  const app = document.getElementById("app");
+  let board = state.variant === "K1" ? renderK1() : state.variant === "K2" ? renderK2() : renderK3();
+  if (state.view === "links") board = `<p style="font-size:14px;color:var(--ink-soft);padding:10px clamp(16px,3vw,40px)">Links view is out of scope for ticket #5 — see the <em>homepage shell</em> prototype (ticket #4). This prototype focuses on the Kanban view.</p>`;
+  app.innerHTML = headerHtml() + `<main class="d-main">${board}</main>`;
+  wireHeader(app);
+  if (state.view === "kanban") {
+    if (state.variant === "K1") wireK1(app);
+    else if (state.variant === "K2") wireK2(app);
+    else wireK3(app);
+    wireTaskDnD(app);
+    if (state.variant !== "K2") wireColDnD(app);
+  }
+  updateInspector(); updateSwitcherLabel();
+}
+
+/* ================= shared header wiring ================= */
+function wireHeader(root) {
+  root.querySelectorAll("[data-ws]").forEach(el => el.addEventListener("click", () => mut(() => { state.activeWorkspace = el.dataset.ws; })));
+  root.querySelectorAll("[data-view]").forEach(b => b.onclick = () => mut(() => { state.view = b.dataset.view; }));
+  root.querySelectorAll("[data-cycle-theme]").forEach(b => b.onclick = () => mut(() => { const o = ["light","dark","system"]; state.theme = o[(o.indexOf(state.theme)+1)%3]; }));
+  root.querySelectorAll("[data-inspector]").forEach(b => b.onclick = () => document.getElementById("inspector").classList.toggle("open"));
+  const s = root.querySelector("[data-search]"); if (s) s.addEventListener("submit", e => { e.preventDefault(); });
+  const eng = root.querySelector("[data-engine]"); if (eng) eng.onchange = () => mut(() => { state.search = { engine: eng.value }; });
+  root.querySelectorAll("[data-add-kcol]").forEach(b => b.onclick = () => addColumn());
+  root.querySelectorAll("[data-del-kcol]").forEach(b => b.onclick = () => deleteColumn(b.dataset.delKcol));
+}
+
+/* ================= mutations ================= */
+const mut = fn => { fn(); render(); };
+function addTask(colId, { title = "", notes = "", due = "" } = {}) {
+  const c = findKcol(colId); if (!c || !title.trim()) return;
+  c.tasks.push({ id: uid(), title: title.trim(), notes: notes.trim(), due: due });
+}
+function updateTask(id, patch) { const f = findTask(id); if (f) Object.assign(f.t, patch); }
+function deleteTask(id) { const f = findTask(id); if (f) f.c.tasks.splice(f.c.tasks.indexOf(f.t), 1); }
+function addColumn(title = "") {
+  ws().kanban.columns.push({ id: uid(), title: title.trim() || "New column", tasks: [] });
+}
+function renameColumn(id, title) { const c = findKcol(id); if (c && title.trim()) c.title = title.trim(); }
+function deleteColumn(id) {
+  const cols = ws().kanban.columns; if (cols.length <= 1) return notice("Keep at least one column.");
+  const i = cols.findIndex(c => c.id === id); cols.splice(i, 1);
+}
+function moveColumn(id, dir) {
+  const cols = ws().kanban.columns; const i = cols.findIndex(c => c.id === id);
+  const j = i + dir; if (j < 0 || j >= cols.length) return; [cols[i], cols[j]] = [cols[j], cols[i]];
+}
+function notice(msg) { alert(msg); }
+
+/* ================= inline editing (K1) ================= */
+function wireK1(root) {
+  root.querySelectorAll("[data-add-task]").forEach(f => f.addEventListener("submit", e => {
+    e.preventDefault(); const inp = f.querySelector("input"); const v = inp.value; if (!v.trim()) return;
+    mut(() => addTask(f.dataset.col, { title: v }));
+  }));
+  root.querySelectorAll("[data-kcol-title]").forEach(s => s.addEventListener("click", e => {
+    const c = findKcol(s.dataset.kcolTitle); const head = s.closest(".k1-col-head");
+    const inp = document.createElement("input"); inp.className = "t"; inp.value = c.title;
+    s.replaceWith(inp); inp.focus(); inp.select();
+    const commit = () => { if (inp.value.trim()) mut(() => renameColumn(c.id, inp.value)); else render(); };
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("keydown", ev => { if (ev.key === "Enter") commit(); if (ev.key === "Escape") render(); });
+  }));
+  root.querySelectorAll("[data-edit-title]").forEach(s => s.addEventListener("click", e => {
+    const f = findTask(s.dataset.editTitle); const wrap = s.closest(".k1-task");
+    const inp = document.createElement("input"); inp.style.cssText = "flex:1;border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:4px 7px;font-size:13.5px;outline:none"; inp.value = f.t.title;
+    s.replaceWith(inp); inp.focus(); inp.select();
+    const commit = () => { if (inp.value.trim()) mut(() => updateTask(f.t.id, { title: inp.value })); else render(); };
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("keydown", ev => { if (ev.key === "Enter") commit(); if (ev.key === "Escape") render(); });
+  }));
+  root.querySelectorAll("[data-edit-notes]").forEach(s => s.addEventListener("click", e => {
+    const f = findTask(s.dataset.editNotes); const wrap = s.closest(".k1-task");
+    if (wrap.querySelector(".k1-edit")) return;
+    const ed = document.createElement("div"); ed.className = "k1-edit";
+    ed.innerHTML = `<textarea placeholder="Notes…">${esc(f.t.notes)}</textarea>
+      <div class="row"><input type="date" value="${f.t.due}"><span class="sp"></span><button data-x="del">Delete</button><button data-x="ok" class="primary">Done</button></div>`;
+    wrap.appendChild(ed);
+    const ta = ed.querySelector("textarea"); ta.focus();
+    ed.querySelector("[data-x='ok']").onclick = () => mut(() => updateTask(f.t.id, { notes: ta.value, due: ed.querySelector("input").value }));
+    ed.querySelector("[data-x='del']").onclick = () => mut(() => deleteTask(f.t.id));
+  }));
+  root.querySelectorAll("[data-toggle-edit]").forEach(b => b.onclick = e => { e.stopPropagation(); root.querySelector(`[data-edit-notes="${b.dataset.toggleEdit}"]`).click(); });
+}
+
+/* ================= drawer (K2) ================= */
+let drawerCtx = null; // { taskId } or { colId } for add
+function openDrawer(ctx) {
+  drawerCtx = ctx; const d = document.getElementById("drawer");
+  const f = ctx.taskId ? findTask(ctx.taskId) : null;
+  const title = ctx.taskId ? (f ? f.t.title : "") : "";
+  const notes = ctx.taskId ? (f ? f.t.notes : "") : "";
+  const due = ctx.taskId ? (f ? f.t.due : "") : "";
+  d.innerHTML = `<div class="head"><h3>${ctx.taskId ? "Edit task" : "New task — " + esc(findKcol(ctx.colId).title)}</h3><div class="sp"></div><button class="iconbtn" data-close>✕</button></div>
+    <div class="body">
+      <label>Title</label><input id="dr-title" value="${esc(title)}">
+      <label>Notes (optional)</label><textarea id="dr-notes">${esc(notes)}</textarea>
+      <label>Due date (optional)</label><input id="dr-due" type="date" value="${due}">
+    </div>
+    <div class="foot">${ctx.taskId ? `<button class="danger" data-dr-del>Delete</button>` : ""}<div class="sp"></div><button data-close>Cancel</button><button class="primary" data-dr-save>Save</button></div>`;
+  d.classList.add("open");
+  d.querySelector("[data-dr-save]").onclick = () => {
+    const t = d.querySelector("#dr-title").value, n = d.querySelector("#dr-notes").value, dd = d.querySelector("#dr-due").value;
+    mut(() => { if (ctx.taskId) updateTask(ctx.taskId, { title: t, notes: n, due: dd }); else addTask(ctx.colId, { title: t, notes: n, due: dd }); });
+    closeDrawer();
+  };
+  d.querySelector("[data-dr-del]") && (d.querySelector("[data-dr-del]").onclick = () => { mut(() => deleteTask(ctx.taskId)); closeDrawer(); });
+  d.querySelectorAll("[data-close]").forEach(b => b.onclick = closeDrawer);
+  d.querySelector("#dr-title").focus();
+}
+function closeDrawer() { document.getElementById("drawer").classList.remove("open"); drawerCtx = null; }
+
+function wireK2(root) {
+  root.querySelectorAll("[data-open-task]").forEach(el => el.addEventListener("click", () => openDrawer({ taskId: el.dataset.openTask })));
+  root.querySelectorAll("[data-add-task]").forEach(b => b.addEventListener("click", () => openDrawer({ colId: b.dataset.addTask })));
+  root.querySelectorAll("[data-col-menu]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); colMenu(b.dataset.colMenu, b); }));
+}
+
+/* ================= composer + popover (K3) ================= */
+function wireK3(root) {
+  const inp = root.querySelector("#k3-composer-input"), sel = root.querySelector("#k3-composer-col");
+  const add = () => { if (inp.value.trim()) mut(() => addTask(sel.value, { title: inp.value })); };
+  root.querySelector("#k3-composer-add").onclick = add;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  root.querySelectorAll("[data-open-task]").forEach(el => el.addEventListener("click", e => { e.stopPropagation(); taskPopover(el.dataset.openTask, el); }));
+  root.querySelectorAll("[data-col-menu]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); colMenu(b.dataset.colMenu, b); }));
+}
+let popEl = null, menuEl = null;
+function clearFloat() { if (popEl) { popEl.remove(); popEl = null; } if (menuEl) { menuEl.remove(); menuEl = null; } }
+function taskPopover(id, anchor) {
+  clearFloat(); const f = findTask(id); if (!f) return;
+  popEl = document.createElement("div"); popEl.className = "pop";
+  popEl.innerHTML = `<h4>Task</h4>
+    <label>Title</label><input id="pp-title" value="${esc(f.t.title)}">
+    <label>Notes</label><textarea id="pp-notes">${esc(f.t.notes)}</textarea>
+    <label>Due date</label><input id="pp-due" type="date" value="${f.t.due}">
+    <div class="row"><button class="danger" data-pp-del>Delete</button><button data-pp-cancel>Cancel</button><button class="primary" data-pp-save>Save</button></div>`;
+  document.body.appendChild(popEl);
+  const r = anchor.getBoundingClientRect();
+  popEl.style.top = Math.min(r.bottom + 6, innerHeight - popEl.offsetHeight - 12) + "px";
+  popEl.style.left = Math.min(Math.max(12, r.left), innerWidth - popEl.offsetWidth - 12) + "px";
+  popEl.querySelector("[data-pp-save]").onclick = () => mut(() => updateTask(id, { title: popEl.querySelector("#pp-title").value, notes: popEl.querySelector("#pp-notes").value, due: popEl.querySelector("#pp-due").value }));
+  popEl.querySelector("[data-pp-cancel]").onclick = clearFloat;
+  popEl.querySelector("[data-pp-del]").onclick = () => mut(() => { deleteTask(id); clearFloat(); });
+  popEl.querySelector("#pp-title").focus();
+}
+function colMenu(id, anchor) {
+  clearFloat(); const c = findKcol(id); const cols = ws().kanban.columns; const i = cols.indexOf(c);
+  menuEl = document.createElement("div"); menuEl.className = "menu";
+  menuEl.innerHTML = `<button data-act="rename">✎ Rename</button>
+    <button data-act="left" ${i===0?"disabled":""}>← Move left</button>
+    <button data-act="right" ${i===cols.length-1?"disabled":""}>Move right →</button>
+    <button data-act="del" class="danger">✕ Delete column</button>`;
+  document.body.appendChild(menuEl);
+  const r = anchor.getBoundingClientRect();
+  menuEl.style.top = Math.min(r.bottom + 6, innerHeight - menuEl.offsetHeight - 12) + "px";
+  menuEl.style.left = Math.min(Math.max(12, r.right - menuEl.offsetWidth), innerWidth - menuEl.offsetWidth - 12) + "px";
+  menuEl.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const a = b.dataset.act; clearFloat();
+    if (a === "rename") openModal({ title: "Rename column", fields: [{ name: "t", value: c.title }], onSubmit: v => v.t && mut(() => renameColumn(id, v.t)) });
+    if (a === "left") mut(() => moveColumn(id, -1));
+    if (a === "right") mut(() => moveColumn(id, 1));
+    if (a === "del") mut(() => deleteColumn(id));
+  });
+}
+
+/* ================= modal (cheap, shared) ================= */
+function openModal({ title, fields = [], confirmLabel = "OK", danger = false, onSubmit }) {
+  clearFloat();
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(10,12,16,.45);z-index:85;display:flex;align-items:center;justify-content:center";
+  const id = "m-" + uid();
+  ov.innerHTML = `<div style="background:#fff;color:#1b1e24;border-radius:14px;padding:20px;width:min(340px,92vw);box-shadow:0 16px 48px rgba(0,0,0,.3)">
+    <h3 style="font-size:16px;margin-bottom:12px">${title}</h3>
+    ${fields.map(f => `<input id="${id}-${f.name}" placeholder="${f.placeholder||""}" value="${f.value||""}" style="width:100%;border:1px solid #ccd2da;border-radius:9px;padding:9px 11px;margin-bottom:12px">`).join("")}
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button data-x="cancel" style="border-radius:9px;padding:8px 16px;font-size:13.5px;border:1px solid #ccd2da;background:#fff">Cancel</button>
+      <button data-x="ok" class="${danger?"danger":""}" style="border-radius:9px;padding:8px 16px;font-size:13.5px;border:1px solid ${danger?"#a5483a":"#3a6ea5"};background:${danger?"#a5483a":"#3a6ea5"};color:#fff;font-weight:700">${confirmLabel}</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('[data-x="cancel"]').onclick = close;
+  ov.querySelector(".veil") && (ov.querySelector(".veil").onclick = close);
+  ov.querySelector('[data-x="ok"]').onclick = () => { const vals = {}; for (const f of fields) vals[f.name] = ov.querySelector(`#${id}-${f.name}`).value.trim(); close(); onSubmit(vals); };
+  const first = ov.querySelector("input"); if (first) { first.focus(); first.onkeydown = e => { if (e.key === "Enter") ov.querySelector('[data-x="ok"]').click(); }; }
+}
+
+/* ================= drag & drop ================= */
+let dragPayload = null;
+function wireTaskDnD(root) {
+  root.querySelectorAll("[data-drag-type='task']").forEach(el => {
+    el.addEventListener("dragstart", e => { dragPayload = JSON.parse(el.dataset.drag); el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "x"); });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging"); dragPayload = null; root.querySelectorAll(".dragover").forEach(x => x.classList.remove("dragover")); });
+  });
+  root.querySelectorAll("[data-drop]").forEach(zone => {
+    if (!zone.dataset.drop.startsWith("kcol:")) return;
+    zone.addEventListener("dragover", e => { if (!dragPayload || dragPayload.type !== "task") return; e.preventDefault(); zone.classList.add("dragover"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+    zone.addEventListener("drop", e => {
+      e.preventDefault(); zone.classList.remove("dragover");
+      if (!dragPayload) return;
+      const p = dragPayload; dragPayload = null;
+      if (p.type === "task") {
+        const src = findKcol(p.from), dst = findKcol(zone.dataset.drop.split(":")[1]); if (!src || !dst) return;
+        const i = src.tasks.findIndex(t => t.id === p.id); if (i < 0) return;
+        const [tk] = src.tasks.splice(i, 1);
+        const after = dropAfter(zone, e.clientY, "[data-drag-type='task']");
+        const at = after ? dst.tasks.findIndex(t => t.id === after) : dst.tasks.length;
+        dst.tasks.splice(at < 0 ? dst.tasks.length : at, 0, tk);
+        render();
+      }
+    });
+  });
+}
+function wireColDnD(root) {
+  root.querySelectorAll("[data-drag-type='kcol']").forEach(el => {
+    el.addEventListener("dragstart", e => { dragPayload = JSON.parse(el.dataset.drag); el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "x"); });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging"); dragPayload = null; root.querySelectorAll(".dragover").forEach(x => x.classList.remove("dragover")); });
+  });
+  const board = root.querySelector(".k1-board, .k3-board");
+  if (board) board.addEventListener("dragover", e => { if (dragPayload && dragPayload.type === "kcol") { e.preventDefault(); } });
+  board && board.addEventListener("drop", e => {
+    if (!dragPayload || dragPayload.type !== "kcol") return;
+    e.preventDefault();
+    const draggedId = dragPayload.id; dragPayload = null;
+    const cols = ws().kanban.columns; const i = cols.findIndex(c => c.id === draggedId);
+    if (i < 0) return;
+    const [col] = cols.splice(i, 1);
+    const rest = [...board.querySelectorAll("[data-drag-type='kcol']")].filter(x => x.dataset.id !== draggedId);
+    let insertBefore = rest.length;
+    for (let k = 0; k < rest.length; k++) { const r = rest[k].getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { insertBefore = k; break; } }
+    cols.splice(insertBefore, 0, col);
+    render();
+  });
+}
+function dropAfter(zone, y, sel) {
+  const els = [...zone.querySelectorAll(sel)].filter(el => !el.classList.contains("dragging"));
+  let best = null, bestOff = -Infinity;
+  for (const el of els) { const r = el.getBoundingClientRect(); const off = y - r.top - r.height / 2;
+    if (off < 0 && off > bestOff) { bestOff = off; best = el; } }
+  return best ? (best.dataset.id || null) : null;
+}
+
+/* ================= inspector + switcher ================= */
+function updateInspector() {
+  document.getElementById("inspector-json").textContent = JSON.stringify(
+    { variant: state.variant, theme: state.theme, activeWorkspace: ws().name,
+      kanban: ws().kanban }, null, 2);
+}
+const VARIANTS = [ { key: "K1", name: "Inline" }, { key: "K2", name: "Glance + drawer" }, { key: "K3", name: "Composer + popover" } ];
+function setVariant(k, push = true) {
+  state.variant = k;
+  document.body.dataset.variant = k;
+  if (push) { const u = new URL(location.href); u.searchParams.set("variant", k); history.replaceState(null, "", u); }
+  clearFloat(); render();
+}
+function updateSwitcherLabel() {
+  const v = VARIANTS.find(x => x.key === state.variant);
+  document.getElementById("sw-label").innerHTML = `${v.key} <small>· ${v.name}</small>`;
+}
+function cycle(dir) { const i = VARIANTS.findIndex(v => v.key === state.variant); setVariant(VARIANTS[(i + dir + VARIANTS.length) % VARIANTS.length].key); }
+document.getElementById("sw-prev").onclick = () => cycle(-1);
+document.getElementById("sw-next").onclick = () => cycle(1);
+addEventListener("keydown", e => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+  if (e.key === "ArrowLeft") cycle(-1); if (e.key === "ArrowRight") cycle(1); if (e.key === "Escape") clearFloat();
+});
+
+/* ================= boot ================= */
+setVariant((new URL(location.href).searchParams.get("variant") || "K1").toUpperCase(), false);
+</script>
+</body>
+</html>
