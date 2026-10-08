@@ -2,34 +2,53 @@
   import {
     addBlock,
     addColumn,
+    addKanbanColumn,
     addLink,
+    addTask,
     addWorkspace,
     deleteBlock,
     deleteColumn,
+    deleteKanbanColumn,
     deleteLink,
+    deleteTask,
     deleteWorkspace,
     domainOf,
     letterTile,
     MAX_BACKGROUND_BASE64,
     moveBlock,
     moveLink,
+    moveTask,
     removeBackground,
     renameBlock,
     renameColumn,
+    renameKanbanColumn,
     renameLink,
     renameWorkspace,
     reorderColumn,
+    reorderKanbanColumn,
     setBackground,
     setBackgroundAlpha,
     setFavicon,
     setFaviconSource,
     setSearchEngine,
     setTheme,
+    updateTask,
     updateWorkspace,
   } from "./store/core";
   import { browserCodec } from "./store/codec";
   import { loadState, saveState } from "./store/persistence";
-  import type { Block, Column, FaviconSource, Link, SearchEngine, StargateState, Theme, Workspace } from "./store/types";
+  import type {
+    Block,
+    Column,
+    FaviconSource,
+    KanbanColumn,
+    Link,
+    SearchEngine,
+    StargateState,
+    Task,
+    Theme,
+    Workspace,
+  } from "./store/types";
 
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded);
@@ -40,10 +59,20 @@
   type DragPayload =
     | { kind: "column"; columnId: string }
     | { kind: "block"; columnId: string; blockId: string }
-    | { kind: "link"; columnId: string; blockId: string; linkId: string };
+    | { kind: "link"; columnId: string; blockId: string; linkId: string }
+    | { kind: "kanbanColumn"; columnId: string }
+    | { kind: "task"; columnId: string; taskId: string };
 
   let drag: DragPayload | null = $state(null);
   let settingsOpen: boolean = $state(false);
+  let view: "links" | "kanban" = $state("links");
+  let expandedTaskId: string | null = $state(null);
+  let expandedColumnId: string | null = $state(null);
+  let notesDraft: string = $state("");
+  let dueDraft: string = $state("");
+  let editingTaskId: string | null = $state(null);
+  let editingColumnId: string | null = $state(null);
+  let titleDraft: string = $state("");
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
@@ -288,6 +317,132 @@
     commit(deleteLink(doc, active.id, column.id, block.id, link.id));
   }
 
+  function todayISO(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function dueStatus(due: string | null): "overdue" | "today" | "upcoming" | null {
+    if (!due) return null;
+    const today = todayISO();
+    if (due < today) return "overdue";
+    if (due === today) return "today";
+    return "upcoming";
+  }
+
+  function onAddKanbanColumn(e: SubmitEvent) {
+    e.preventDefault();
+    const input = (e.currentTarget as HTMLFormElement).querySelector("input");
+    const title = input?.value.trim();
+    if (!title || !active) return;
+    commit(addKanbanColumn(doc, active.id, title));
+    if (input) input.value = "";
+  }
+
+  function onAddTask(e: SubmitEvent, column: KanbanColumn) {
+    e.preventDefault();
+    const input = (e.currentTarget as HTMLFormElement).querySelector("input");
+    const title = input?.value.trim();
+    if (!title || !active) return;
+    commit(addTask(doc, active.id, column.id, title));
+    if (input) input.value = "";
+  }
+
+  function onRenameKanbanColumn(column: KanbanColumn) {
+    if (!active) return;
+    const title = prompt("Column name", column.title)?.trim();
+    if (!title) return;
+    commit(renameKanbanColumn(doc, active.id, column.id, title));
+  }
+
+  function onDeleteKanbanColumn(column: KanbanColumn) {
+    if (!active) return;
+    if (active.kanban.columns.length <= 1) return;
+    if (!confirm(`Delete column “${column.title}” and its tasks?`)) return;
+    commit(deleteKanbanColumn(doc, active.id, column.id));
+  }
+
+  function beginEditTitle(column: KanbanColumn, task: Task) {
+    editingColumnId = column.id;
+    editingTaskId = task.id;
+    titleDraft = task.title;
+  }
+
+  function commitTitle() {
+    if (!active || editingTaskId === null || editingColumnId === null) return;
+    const columnId = editingColumnId;
+    const taskId = editingTaskId;
+    const title = titleDraft.trim();
+    editingTaskId = null;
+    editingColumnId = null;
+    if (!title) return;
+    commit(updateTask(doc, active.id, columnId, taskId, { title }));
+  }
+
+  function cancelTitle() {
+    editingTaskId = null;
+    editingColumnId = null;
+  }
+
+  function onTitleKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTitle();
+    } else if (e.key === "Escape") {
+      cancelTitle();
+    }
+  }
+
+  function toggleEditor(column: KanbanColumn, task: Task) {
+    if (expandedTaskId === task.id && expandedColumnId === column.id) {
+      expandedTaskId = null;
+      expandedColumnId = null;
+    } else {
+      expandedTaskId = task.id;
+      expandedColumnId = column.id;
+      notesDraft = task.notes;
+      dueDraft = task.due ?? "";
+    }
+  }
+
+  function currentExpandedTask(): Task | null {
+    if (!active || expandedTaskId === null || expandedColumnId === null) return null;
+    const column = active.kanban.columns.find((c) => c.id === expandedColumnId);
+    return column?.tasks.find((t) => t.id === expandedTaskId) ?? null;
+  }
+
+  function commitNotes() {
+    if (!active || expandedTaskId === null || expandedColumnId === null) return;
+    const task = currentExpandedTask();
+    if (!task || task.notes === notesDraft) return;
+    commit(updateTask(doc, active.id, expandedColumnId, expandedTaskId, { notes: notesDraft }));
+  }
+
+  function onDueChange() {
+    if (!active || expandedTaskId === null || expandedColumnId === null) return;
+    const task = currentExpandedTask();
+    const due = dueDraft || null;
+    if (!task || task.due === due) return;
+    commit(updateTask(doc, active.id, expandedColumnId, expandedTaskId, { due }));
+  }
+
+  function onDeleteTask(column: KanbanColumn, task: Task) {
+    if (!active) return;
+    if (!confirm(`Delete task “${task.title}”?`)) return;
+    if (expandedTaskId === task.id && expandedColumnId === column.id) {
+      expandedTaskId = null;
+      expandedColumnId = null;
+    }
+    if (editingTaskId === task.id && editingColumnId === column.id) {
+      editingTaskId = null;
+      editingColumnId = null;
+    }
+    commit(deleteTask(doc, active.id, column.id, task.id));
+  }
+
   function startDrag(e: DragEvent, payload: DragPayload) {
     drag = payload;
     if (e.dataTransfer) {
@@ -358,6 +513,43 @@
     drag = null;
     commit(moveLink(doc, active.id, column.id, payload.blockId, block.id, payload.linkId, linkIndex));
   }
+
+  function kanbanColumnDragOver(e: DragEvent) {
+    if (!drag) return;
+    if (drag.kind !== "kanbanColumn" && drag.kind !== "task") return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function kanbanTaskDragOver(e: DragEvent) {
+    if (!drag || drag.kind !== "task") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function dropOnKanbanColumn(e: DragEvent, column: KanbanColumn, columnIndex: number) {
+    if (!active || !drag) return;
+    if (drag.kind !== "kanbanColumn" && drag.kind !== "task") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    if (payload.kind === "kanbanColumn") {
+      commit(reorderKanbanColumn(doc, active.id, payload.columnId, columnIndex));
+    } else {
+      commit(moveTask(doc, active.id, payload.columnId, column.id, payload.taskId, column.tasks.length));
+    }
+  }
+
+  function dropOnKanbanTask(e: DragEvent, column: KanbanColumn, taskIndex: number) {
+    if (!active || !drag || drag.kind !== "task") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    commit(moveTask(doc, active.id, payload.columnId, column.id, payload.taskId, taskIndex));
+  }
 </script>
 
 {#if active?.background.dataUrl}
@@ -389,8 +581,8 @@
   <button class="tab add" onclick={createWorkspace}>＋ Add</button>
   <div class="spacer"></div>
   <div class="seg">
-    <button class="sel">🔖 Links</button>
-    <button disabled title="Coming in ticket #15">📋 Kanban</button>
+    <button class:sel={view === "links"} onclick={() => (view = "links")}>🔖 Links</button>
+    <button class:sel={view === "kanban"} onclick={() => (view = "kanban")}>📋 Kanban</button>
   </div>
   <button class="pill" onclick={cycleTheme}>{THEME_LABEL[doc.settings.theme]}</button>
   <div class="popover-wrap">
@@ -458,6 +650,7 @@
 
 <main>
   {#if active}
+    {#if view === "links"}
     <div class="cols">
       {#each active.columns as column, columnIndex (column.id)}
         <section
@@ -562,5 +755,106 @@
         <button type="submit">＋ Column</button>
       </form>
     </div>
+    {:else}
+      <div class="kanban-board">
+        {#each active.kanban.columns as column, columnIndex (column.id)}
+          <section
+            class="kanban-col"
+            role="group"
+            aria-label={`${column.title} column`}
+            ondragover={kanbanColumnDragOver}
+            ondrop={(e) => dropOnKanbanColumn(e, column, columnIndex)}
+          >
+            <header class="kanban-col-head">
+              <button
+                type="button"
+                class="kanban-col-title"
+                draggable={true}
+                title="Drag to reorder · click to rename"
+                ondragstart={(e) => startDrag(e, { kind: "kanbanColumn", columnId: column.id })}
+                ondragend={endDrag}
+                onclick={() => onRenameKanbanColumn(column)}
+              >
+                {column.title}
+              </button>
+              <span class="kanban-col-count">{column.tasks.length}</span>
+              <div class="mini-row">
+                <button class="mini" title="Delete column" onclick={() => onDeleteKanbanColumn(column)}>✕</button>
+              </div>
+            </header>
+
+            <div class="kanban-tasks" role="list">
+              {#each column.tasks as task, taskIndex (task.id)}
+                <div
+                  class="kanban-task"
+                  role="listitem"
+                  draggable={true}
+                  ondragstart={(e) => startDrag(e, { kind: "task", columnId: column.id, taskId: task.id })}
+                  ondragend={endDrag}
+                  ondragover={kanbanTaskDragOver}
+                  ondrop={(e) => dropOnKanbanTask(e, column, taskIndex)}
+                >
+                  <div class="kanban-task-row">
+                    {#if editingTaskId === task.id && editingColumnId === column.id}
+                      <input
+                        class="task-title-input"
+                        bind:value={titleDraft}
+                        onkeydown={onTitleKeydown}
+                        onblur={commitTitle}
+                      />
+                    {:else}
+                      <button class="task-title" onclick={() => beginEditTitle(column, task)}>{task.title}</button>
+                    {/if}
+                    <button class="mini" title="Edit notes & due date" onclick={() => toggleEditor(column, task)}>✎</button>
+                  </div>
+
+                  <div class="kanban-task-meta">
+                    <button class="note-preview" onclick={() => toggleEditor(column, task)}>
+                      {#if task.notes.trim()}
+                        {task.notes}
+                      {:else}
+                        <span class="muted">+ note</span>
+                      {/if}
+                    </button>
+                    {#if task.due}
+                      {@const due = dueStatus(task.due)}
+                      <span class="due-chip" class:overdue={due === "overdue"} class:today={due === "today"}>
+                        {task.due}
+                      </span>
+                    {/if}
+                  </div>
+
+                  {#if expandedTaskId === task.id && expandedColumnId === column.id}
+                    <div class="kanban-task-editor">
+                      <textarea
+                        bind:value={notesDraft}
+                        onblur={commitNotes}
+                        placeholder="Notes…"
+                        rows={3}
+                      ></textarea>
+                      <label class="due-field">
+                        <span>Due</span>
+                        <input type="date" bind:value={dueDraft} onchange={onDueChange} />
+                      </label>
+                      <button class="danger" onclick={() => onDeleteTask(column, task)}>Delete task</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+
+              <form class="inline kanban-add-task" onsubmit={(e) => onAddTask(e, column)}>
+                <input placeholder="Add task…" />
+                <button type="submit">＋</button>
+              </form>
+            </div>
+          </section>
+        {/each}
+
+        <form class="kanban-add-col" onsubmit={onAddKanbanColumn}>
+          <input placeholder="Add column…" />
+          <button type="submit">＋ Column</button>
+        </form>
+      </div>
+    {/if}
   {/if}
 </main>

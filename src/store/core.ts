@@ -560,6 +560,138 @@ export function moveLink(
   return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
 }
 
+export function addKanbanColumn(
+  state: StargateState,
+  workspaceId: string,
+  title: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const kanban = {
+    ...workspace.kanban,
+    columns: [...workspace.kanban.columns, { id: newId(), title, tasks: [] }],
+  };
+  return mapWorkspace(state, workspaceId, { kanban }) ?? state;
+}
+
+export function renameKanbanColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  title: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const columns = updateById(workspace.kanban.columns, columnId, { title });
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function deleteKanbanColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace || workspace.kanban.columns.length <= 1) return state;
+  const columns = removeById(workspace.kanban.columns, columnId);
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function reorderKanbanColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  toIndex: number,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const columns = moveById(workspace.kanban.columns, columnId, toIndex);
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function addTask(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  title: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.kanban.columns.find((c) => c.id === columnId);
+  if (!workspace || !column) return state;
+  const columns = workspace.kanban.columns.map((c) =>
+    c.id === columnId ? { ...c, tasks: [...c.tasks, { id: newId(), title, notes: "", due: null }] } : c,
+  );
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function updateTask(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  taskId: string,
+  patch: { title?: string; notes?: string; due?: string | null },
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.kanban.columns.find((c) => c.id === columnId);
+  if (!workspace || !column) return state;
+  const tasks = updateById(column.tasks, taskId, patch);
+  if (tasks === null) return state;
+  const columns = workspace.kanban.columns.map((c) => (c.id === columnId ? { ...c, tasks } : c));
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function deleteTask(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  taskId: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.kanban.columns.find((c) => c.id === columnId);
+  if (!workspace || !column) return state;
+  const tasks = removeById(column.tasks, taskId);
+  if (tasks === null) return state;
+  const columns = workspace.kanban.columns.map((c) => (c.id === columnId ? { ...c, tasks } : c));
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
+export function moveTask(
+  state: StargateState,
+  workspaceId: string,
+  fromColId: string,
+  toColId: string,
+  taskId: string,
+  toIndex: number,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const fromColumn = workspace.kanban.columns.find((c) => c.id === fromColId);
+  const toColumn = workspace.kanban.columns.find((c) => c.id === toColId);
+  if (!fromColumn || !toColumn) return state;
+  const task = fromColumn.tasks.find((t) => t.id === taskId);
+  if (!task) return state;
+
+  if (fromColId === toColId) {
+    const tasks = moveById(fromColumn.tasks, taskId, toIndex);
+    if (tasks === null) return state;
+    const columns = workspace.kanban.columns.map((c) => (c.id === fromColId ? { ...c, tasks } : c));
+    return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+  }
+
+  const fromTasks = fromColumn.tasks.filter((t) => t.id !== taskId);
+  const toTasks = toColumn.tasks.slice();
+  toTasks.splice(clampIndex(toIndex, toTasks.length), 0, task);
+  const columns = workspace.kanban.columns.map((c) => {
+    if (c.id === fromColId) return { ...c, tasks: fromTasks };
+    if (c.id === toColId) return { ...c, tasks: toTasks };
+    return c;
+  });
+  return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
+}
+
 export function createDefaultState(now = new Date().toISOString()): StargateState {
   let state: StargateState = {
     schemaVersion: SCHEMA_VERSION,
