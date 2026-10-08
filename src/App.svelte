@@ -80,6 +80,7 @@
 
   let drag: DragPayload | null = $state(null);
   let settingsOpen: boolean = $state(false);
+  let popoverWrap: HTMLDivElement | null = null;
   let view: "links" | "kanban" = $state("links");
   let storageError: string | null = $state(null);
   let pendingSave: StargateState | null = $state(null);
@@ -95,11 +96,32 @@
   let settingsBlockId: string | null = $state(null);
   let settingsDescription: string = $state("");
   let settingsFaviconSize: FaviconSize = $state("sm");
+  let settingsTitle: string = $state("");
   let linkSettingsColumnId: string | null = $state(null);
   let linkSettingsBlockId: string | null = $state(null);
   let linkSettingsLinkId: string | null = $state(null);
   let linkSettingsTitle: string = $state("");
   let linkSettingsUrl: string = $state("");
+
+  $effect(() => {
+    if (!settingsOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (popoverWrap && !popoverWrap.contains(e.target as Node)) {
+        settingsOpen = false;
+      }
+    };
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        settingsOpen = false;
+      }
+    };
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onDocKey);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onDocKey);
+    };
+  });
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
@@ -447,13 +469,6 @@
     commit(deleteColumn(doc, active.id, column.id));
   }
 
-  function onRenameBlock(column: Column, block: Block) {
-    if (!active) return;
-    const title = prompt("Block name", block.title)?.trim();
-    if (!title) return;
-    commit(renameBlock(doc, active.id, column.id, block.id, title));
-  }
-
   function onDeleteBlock(column: Column, block: Block) {
     if (!active) return;
     if (!confirm(`Delete block “${block.title}”?`)) return;
@@ -463,6 +478,7 @@
   function openBlockSettings(column: Column, block: Block) {
     settingsColumnId = column.id;
     settingsBlockId = block.id;
+    settingsTitle = block.title;
     settingsDescription = block.description ?? "";
     settingsFaviconSize = block.faviconSize ?? "sm";
   }
@@ -474,10 +490,15 @@
 
   function saveBlockSettings() {
     if (!active || settingsColumnId === null || settingsBlockId === null) return;
-    commit(updateBlockSettings(doc, active.id, settingsColumnId, settingsBlockId, {
+    const column = active.columns.find((c) => c.id === settingsColumnId);
+    const block = column?.blocks.find((b) => b.id === settingsBlockId);
+    const title = settingsTitle.trim() || block?.title || "Untitled block";
+    let next = renameBlock(doc, active.id, settingsColumnId, settingsBlockId, title);
+    next = updateBlockSettings(next, active.id, settingsColumnId, settingsBlockId, {
       description: settingsDescription.trim(),
       faviconSize: settingsFaviconSize,
-    }));
+    });
+    commit(next);
     closeBlockSettings();
   }
 
@@ -843,7 +864,7 @@
     <button class:sel={view === "kanban"} onclick={() => (view = "kanban")}>📋 Kanban</button>
   </div>
   <button class="pill" onclick={cycleTheme}>{THEME_LABEL[doc.settings.theme]}</button>
-  <div class="popover-wrap">
+  <div class="popover-wrap" bind:this={popoverWrap}>
     <button
       class="pill"
       title="Settings"
@@ -1018,7 +1039,6 @@
                 </h3>
                 <div class="mini-row">
                   <button class="mini" title="Block settings" onclick={() => openBlockSettings(column, block)}>⚙</button>
-                  <button class="mini" title="Rename block" onclick={() => onRenameBlock(column, block)}>✎</button>
                   <button class="mini" title="Delete block" onclick={() => onDeleteBlock(column, block)}>✕</button>
                 </div>
               </header>
@@ -1217,6 +1237,21 @@
       tabindex="-1"
     >
       <h2>Block settings</h2>
+      <label class="field">
+        <span>Title</span>
+        <input
+          bind:value={settingsTitle}
+          placeholder="Block title…"
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              saveBlockSettings();
+            } else if (e.key === "Escape") {
+              closeBlockSettings();
+            }
+          }}
+        />
+      </label>
       <label class="field">
         <span>Description</span>
         <input
