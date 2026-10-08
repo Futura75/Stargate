@@ -6,7 +6,7 @@ import {
   createDefaultState,
   updateBlockSettings,
 } from "./core";
-import type { FaviconSize, StargateState } from "./types";
+import type { FaviconSize, LinkStyle, StargateState } from "./types";
 
 interface Fixture {
   s: StargateState;
@@ -58,6 +58,16 @@ describe("updateBlockSettings", () => {
       const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { faviconSize: size });
       expect(blockA(next).faviconSize).toBe(size);
       expect(blockA(f.s).faviconSize).toBeUndefined();
+    }
+  });
+
+  it("sets a link style", () => {
+    const f = fixture();
+    const styles: LinkStyle[] = ["list", "detail", "tiles"];
+    for (const style of styles) {
+      const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { linkStyle: style });
+      expect(blockA(next).linkStyle).toBe(style);
+      expect(blockA(f.s).linkStyle).toBeUndefined();
     }
   });
 
