@@ -34,6 +34,7 @@
     setFaviconSource,
     setSearchEngine,
     setTheme,
+    updateBlockSettings,
     updateTask,
     updateWorkspace,
   } from "./store/core";
@@ -42,6 +43,7 @@
   import type {
     Block,
     Column,
+    FaviconSize,
     FaviconSource,
     KanbanColumn,
     Link,
@@ -79,6 +81,10 @@
   let editingTaskId: string | null = $state(null);
   let editingColumnId: string | null = $state(null);
   let titleDraft: string = $state("");
+  let settingsColumnId: string | null = $state(null);
+  let settingsBlockId: string | null = $state(null);
+  let settingsDescription: string = $state("");
+  let settingsFaviconSize: FaviconSize = $state("sm");
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
@@ -92,6 +98,18 @@
     off: "Off",
     "google-s2": "Google",
     duckduckgo: "DuckDuckGo",
+  };
+
+  const FAVICON_SIZE_OPTIONS: FaviconSize[] = ["sm", "md", "lg"];
+  const FAVICON_SIZE_LABEL: Record<FaviconSize, string> = {
+    sm: "Small · 16px",
+    md: "Medium · 24px",
+    lg: "Large · 32px",
+  };
+  const FAVICON_SIZE_PX: Record<FaviconSize, number> = {
+    sm: 16,
+    md: 24,
+    lg: 32,
   };
 
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -384,6 +402,27 @@
     if (!active) return;
     if (!confirm(`Delete block “${block.title}”?`)) return;
     commit(deleteBlock(doc, active.id, column.id, block.id));
+  }
+
+  function openBlockSettings(column: Column, block: Block) {
+    settingsColumnId = column.id;
+    settingsBlockId = block.id;
+    settingsDescription = block.description ?? "";
+    settingsFaviconSize = block.faviconSize ?? "sm";
+  }
+
+  function closeBlockSettings() {
+    settingsColumnId = null;
+    settingsBlockId = null;
+  }
+
+  function saveBlockSettings() {
+    if (!active || settingsColumnId === null || settingsBlockId === null) return;
+    commit(updateBlockSettings(doc, active.id, settingsColumnId, settingsBlockId, {
+      description: settingsDescription.trim(),
+      faviconSize: settingsFaviconSize,
+    }));
+    closeBlockSettings();
   }
 
   function onEditLink(column: Column, block: Block, link: Link) {
@@ -792,16 +831,23 @@
                   {block.title}
                 </h3>
                 <div class="mini-row">
+                  <button class="mini" title="Block settings" onclick={() => openBlockSettings(column, block)}>⚙</button>
                   <button class="mini" title="Rename block" onclick={() => onRenameBlock(column, block)}>✎</button>
                   <button class="mini" title="Delete block" onclick={() => onDeleteBlock(column, block)}>✕</button>
                 </div>
               </header>
+
+              {#if block.description}
+                <p class="block-description">{block.description}</p>
+              {/if}
 
               <div class="links" role="list">
                 {#each block.links as link, linkIndex (link.id)}
                   {@const tile = letterTile(domainOf(link.url))}
                   {@const favicon = link.favicon?.dataUrl}
                   {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
+                  {@const faviconSize = block.faviconSize ?? "sm"}
+                  {@const faviconPx = FAVICON_SIZE_PX[faviconSize]}
                   <div
                     class="link-row"
                     role="listitem"
@@ -813,9 +859,13 @@
                     ondrop={(e) => dropOnLink(e, column, block, linkIndex)}
                   >
                     <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>
-                      <span class="favicon" style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}>
+                      <span
+                        class="favicon"
+                        style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}
+                        style:--favicon-size={`${faviconPx}px`}
+                      >
                         {#if favicon}
-                          <img class="favicon-img" src={favicon} alt="" width="16" height="16" draggable={false} />
+                          <img class="favicon-img" src={favicon} alt="" width={faviconPx} height={faviconPx} draggable={false} />
                         {:else}
                           <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
                           {#if remote}
@@ -824,8 +874,8 @@
                               loading="lazy"
                               src={remote}
                               alt=""
-                              width="16"
-                              height="16"
+                              width={faviconPx}
+                              height={faviconPx}
                               draggable={false}
                               onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
                             />
@@ -965,3 +1015,56 @@
     {/if}
   {/if}
 </main>
+
+{#if settingsColumnId !== null && settingsBlockId !== null}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) closeBlockSettings();
+    }}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Block settings"
+      tabindex="-1"
+    >
+      <h2>Block settings</h2>
+      <label class="field">
+        <span>Description</span>
+        <input
+          bind:value={settingsDescription}
+          placeholder="Optional description…"
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              saveBlockSettings();
+            } else if (e.key === "Escape") {
+              closeBlockSettings();
+            }
+          }}
+        />
+      </label>
+      <fieldset class="field">
+        <legend>Favicon size</legend>
+        <div class="seg">
+          {#each FAVICON_SIZE_OPTIONS as size (size)}
+            <button
+              type="button"
+              class:sel={settingsFaviconSize === size}
+              onclick={() => (settingsFaviconSize = size)}
+            >
+              {FAVICON_SIZE_LABEL[size]}
+            </button>
+          {/each}
+        </div>
+      </fieldset>
+      <div class="modal-actions">
+        <button type="button" onclick={closeBlockSettings}>Cancel</button>
+        <button type="button" class="primary" onclick={saveBlockSettings}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}

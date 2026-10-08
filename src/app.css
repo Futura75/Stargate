@@ -196,6 +196,14 @@ main {
   margin: 0 0 9px;
 }
 
+.block-description {
+  margin: -4px 0 9px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}
+
 .links {
   display: flex;
   flex-direction: column;
@@ -425,9 +433,10 @@ button.mini:hover {
 }
 
 .favicon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  --favicon-size: 16px;
+  width: var(--favicon-size);
+  height: var(--favicon-size);
+  flex: 0 0 var(--favicon-size);
   border-radius: 4px;
   position: relative;
   display: inline-flex;
@@ -443,15 +452,15 @@ button.mini:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: calc(var(--favicon-size) * 0.62);
   font-weight: 700;
   line-height: 1;
   z-index: 0;
 }
 
 .favicon-img {
-  width: 16px;
-  height: 16px;
+  width: 100%;
+  height: 100%;
   display: block;
   position: absolute;
   inset: 0;
@@ -815,4 +824,94 @@ body[data-resolved="dark"] .notice.error {
   line-height: 1.4;
   color: var(--ink-soft);
   max-width: 240px;
+}
+
+/* ticket #18: per-block settings — description + favicon size */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 18, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 40;
+}
+
+.modal {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.field > span,
+.field legend {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  padding: 0;
+}
+
+.field input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 14px;
+  outline: none;
+}
+
+.field input:focus {
+  border-color: var(--accent);
+}
+
+.field .seg {
+  align-self: flex-start;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-actions button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }

@@ -1,6 +1,7 @@
 export type Theme = "light" | "dark" | "system";
 export type SearchEngine = "google" | "ddg" | "bing";
 export type FaviconSource = "off" | "google-s2" | "duckduckgo";
+export type FaviconSize = "sm" | "md" | "lg";
 
 export interface Settings {
   theme: Theme;
@@ -29,6 +30,8 @@ export interface Link {
 export interface Block {
   id: string;
   title: string;
+  description?: string;
+  faviconSize?: FaviconSize;
   links: Link[];
 }
 

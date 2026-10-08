@@ -1,4 +1,4 @@
-import type { Background, Block, Column, Favicon, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
+import type { Background, Block, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
@@ -327,6 +327,17 @@ export function renameBlock(
   const blocks = updateById(column.blocks, blockId, { title });
   if (blocks === null) return state;
   return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
+}
+
+export function updateBlockSettings(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  patch: { description?: string; faviconSize?: FaviconSize },
+): StargateState {
+  const blocks = mapBlock(state, workspaceId, columnId, blockId, patch);
+  return blocks ?? state;
 }
 
 export function deleteBlock(
