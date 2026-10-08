@@ -10,13 +10,17 @@
     deleteWorkspace,
     domainOf,
     letterTile,
+    MAX_BACKGROUND_BASE64,
     moveBlock,
     moveLink,
+    removeBackground,
     renameBlock,
     renameColumn,
     renameLink,
     renameWorkspace,
     reorderColumn,
+    setBackground,
+    setBackgroundAlpha,
     setFavicon,
     setFaviconSource,
     setSearchEngine,
@@ -39,7 +43,7 @@
     | { kind: "link"; columnId: string; blockId: string; linkId: string };
 
   let drag: DragPayload | null = $state(null);
-  let faviconMenuOpen: boolean = $state(false);
+  let settingsOpen: boolean = $state(false);
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
@@ -120,6 +124,51 @@
       reader.readAsDataURL(file);
     });
     input.click();
+  }
+
+  function onUploadBackground() {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const alpha = active.background.alpha;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        if (!dataUrl) return;
+        try {
+          const compressed = await browserCodec.compressImage(dataUrl);
+          commit(setBackground(doc, wsId, { dataUrl: compressed, alpha }));
+          settingsOpen = false;
+        } catch (err) {
+          const limit = Math.round(MAX_BACKGROUND_BASE64 / 1024);
+          const message =
+            err instanceof Error && err.message.includes("too large")
+              ? err.message
+              : `That image could not be used as a background (max ${limit} KB after compression).`;
+          window.alert(message);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    input.click();
+  }
+
+  function onBackgroundAlpha(e: Event) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const alpha = Number((e.currentTarget as HTMLInputElement).value);
+    commit(setBackgroundAlpha(doc, wsId, alpha));
+  }
+
+  function onRemoveBackground() {
+    const wsId = active?.id;
+    if (!wsId) return;
+    commit(removeBackground(doc, wsId));
   }
 
   function onSearch(e: SubmitEvent) {
@@ -311,6 +360,15 @@
   }
 </script>
 
+{#if active?.background.dataUrl}
+  <div
+    class="bg-layer"
+    style:background-image={`url(${active.background.dataUrl})`}
+    style:opacity={active.background.alpha / 100}
+    aria-hidden="true"
+  ></div>
+{/if}
+
 <div class="topbar">
   {#each doc.workspaces as ws (ws.id)}
     {#if ws.id === active?.id}
@@ -338,13 +396,13 @@
   <div class="popover-wrap">
     <button
       class="pill"
-      title="Favicon source"
+      title="Settings"
       aria-haspopup="menu"
-      onclick={() => (faviconMenuOpen = !faviconMenuOpen)}
+      onclick={() => (settingsOpen = !settingsOpen)}
     >
-      ⚙ Favicons
+      ⚙ Settings
     </button>
-    {#if faviconMenuOpen}
+    {#if settingsOpen}
       <div class="popover" role="menu">
         <span class="popover-title">Favicon source</span>
         {#each FAVICON_SOURCE_OPTIONS as source (source)}
@@ -355,12 +413,31 @@
             aria-checked={doc.settings.faviconSource === source}
             onclick={() => {
               commit(setFaviconSource(doc, source));
-              faviconMenuOpen = false;
+              settingsOpen = false;
             }}
           >
             {FAVICON_SOURCE_LABEL[source]}
           </button>
         {/each}
+        <div class="popover-divider"></div>
+        <span class="popover-title">Background</span>
+        <button class="popover-option" onclick={onUploadBackground}>🖼️ Upload background</button>
+        <label class="bg-alpha">
+          <span>Fade</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={active?.background.alpha ?? 70}
+            oninput={onBackgroundAlpha}
+            disabled={!active?.background.dataUrl}
+          />
+          <span class="bg-alpha-value">{active?.background.alpha ?? 70}%</span>
+        </label>
+        {#if active?.background.dataUrl}
+          <button class="popover-option" onclick={onRemoveBackground}>🗑️ Remove background</button>
+        {/if}
       </div>
     {/if}
   </div>

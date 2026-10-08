@@ -1,10 +1,12 @@
-import type { Block, Column, Favicon, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
+import type { Background, Block, Column, Favicon, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
 export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
 export const MAX_FAVICON_BASE64 = 8192;
+/** Absolute per-background cap (~500 KB target): base64 data-URL length in characters. */
+export const MAX_BACKGROUND_BASE64 = 700 * 1024;
 
 /** Opaque, unique, random id — never displayed. */
 export function newId(): string {
@@ -256,6 +258,28 @@ export function updateWorkspace(
 ): StargateState {
   const workspaces = updateById(state.workspaces, workspaceId, patch);
   return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function setBackground(
+  state: StargateState,
+  workspaceId: string,
+  background: Background,
+): StargateState {
+  const workspaces = updateById(state.workspaces, workspaceId, { background });
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function removeBackground(state: StargateState, workspaceId: string): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  return setBackground(state, workspaceId, { dataUrl: null, alpha: workspace.background.alpha });
+}
+
+export function setBackgroundAlpha(state: StargateState, workspaceId: string, alpha: number): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const clamped = Math.max(0, Math.min(100, alpha));
+  return setBackground(state, workspaceId, { dataUrl: workspace.background.dataUrl, alpha: clamped });
 }
 
 export function deleteWorkspace(state: StargateState, workspaceId: string): StargateState {
