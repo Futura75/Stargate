@@ -1,4 +1,4 @@
-import type { Background, Block, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
+import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
@@ -7,6 +7,9 @@ export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
 export const MAX_FAVICON_BASE64 = 8192;
 /** Absolute per-background cap (~500 KB target): base64 data-URL length in characters. */
 export const MAX_BACKGROUND_BASE64 = 700 * 1024;
+/** Render-time defaults applied when a workspace omits its appearance settings. */
+export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = { columnCount: 0, fluid: true, columnGap: 18 };
+export const DEFAULT_BLOCK_TITLE_SIZE: BlockTitleSize = "md";
 
 /** Opaque, unique, random id — never displayed. */
 export function newId(): string {
@@ -257,6 +260,24 @@ export function updateWorkspace(
   patch: { icon?: string; color?: string },
 ): StargateState {
   const workspaces = updateById(state.workspaces, workspaceId, patch);
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function updateWorkspaceLayout(
+  state: StargateState,
+  workspaceId: string,
+  layout: WorkspaceLayout,
+): StargateState {
+  const workspaces = updateById(state.workspaces, workspaceId, { layout });
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function updateBlockTitleSize(
+  state: StargateState,
+  workspaceId: string,
+  blockTitleSize: BlockTitleSize,
+): StargateState {
+  const workspaces = updateById(state.workspaces, workspaceId, { blockTitleSize });
   return workspaces === null ? state : { ...state, workspaces };
 }
 

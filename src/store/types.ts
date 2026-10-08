@@ -2,6 +2,7 @@ export type Theme = "light" | "dark" | "system";
 export type SearchEngine = "google" | "ddg" | "bing";
 export type FaviconSource = "off" | "google-s2" | "duckduckgo";
 export type FaviconSize = "sm" | "md" | "lg";
+export type BlockTitleSize = "sm" | "md" | "lg";
 
 export interface Settings {
   theme: Theme;
@@ -54,6 +55,15 @@ export interface KanbanColumn {
   tasks: Task[];
 }
 
+export interface WorkspaceLayout {
+  /** Number of columns in the Links view; 0 means auto (wrap to fit). */
+  columnCount: number;
+  /** true = full-width layout; false = centered fixed max-width. */
+  fluid: boolean;
+  /** Gap between columns in px. */
+  columnGap: number;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -62,6 +72,8 @@ export interface Workspace {
   background: Background;
   columns: Column[];
   kanban: { columns: KanbanColumn[] };
+  layout?: WorkspaceLayout;
+  blockTitleSize?: BlockTitleSize;
 }
 
 export interface StargateState {

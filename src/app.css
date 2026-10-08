@@ -161,9 +161,20 @@ main {
 
 .cols {
   display: flex;
-  gap: 18px;
+  gap: var(--cols-gap, 18px);
   align-items: flex-start;
   flex-wrap: wrap;
+}
+
+.cols-fixed {
+  max-width: var(--cols-max-width, 1080px);
+  margin-inline: auto;
+}
+
+.cols-exact .col {
+  flex: 0 0 calc((100% - var(--cols-gap, 18px) * (var(--cols-count) - 1)) / var(--cols-count));
+  min-width: 0;
+  max-width: none;
 }
 
 .col {
@@ -191,7 +202,7 @@ main {
 }
 
 .block h3 {
-  font-size: 13.5px;
+  font-size: var(--block-title-size, 13.5px);
   font-weight: 700;
   margin: 0 0 9px;
 }
@@ -502,6 +513,35 @@ button.mini:hover {
 .bg-alpha-value {
   min-width: 34px;
   text-align: right;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.setting-row > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-row input[type="number"] {
+  width: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 4px 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.setting-row input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 /* ticket #15: kanban board — inline K1 model */

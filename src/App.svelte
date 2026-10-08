@@ -35,13 +35,18 @@
     setSearchEngine,
     setTheme,
     updateBlockSettings,
+    updateBlockTitleSize,
     updateTask,
     updateWorkspace,
+    updateWorkspaceLayout,
+    DEFAULT_BLOCK_TITLE_SIZE,
+    DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import { browserCodec } from "./store/codec";
   import { loadState, saveState } from "./store/persistence";
   import type {
     Block,
+    BlockTitleSize,
     Column,
     FaviconSize,
     FaviconSource,
@@ -60,6 +65,9 @@
   let activeId: string = $state(loaded.state.workspaces[0]?.id ?? "");
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
+
+  const workspaceLayout = $derived(active?.layout ?? DEFAULT_WORKSPACE_LAYOUT);
+  const blockTitleSize = $derived(active?.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE);
 
   type DragPayload =
     | { kind: "column"; columnId: string }
@@ -110,6 +118,18 @@
     sm: 16,
     md: 24,
     lg: 32,
+  };
+
+  const BLOCK_TITLE_SIZE_OPTIONS: BlockTitleSize[] = ["sm", "md", "lg"];
+  const BLOCK_TITLE_SIZE_LABEL: Record<BlockTitleSize, string> = {
+    sm: "Small",
+    md: "Medium",
+    lg: "Large",
+  };
+  const BLOCK_TITLE_SIZE_PX: Record<BlockTitleSize, number> = {
+    sm: 12,
+    md: 13.5,
+    lg: 16,
   };
 
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -262,6 +282,37 @@
     const wsId = active?.id;
     if (!wsId) return;
     commit(removeBackground(doc, wsId));
+  }
+
+  function onColumnCountChange(e: Event) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const raw = Number((e.currentTarget as HTMLInputElement).value);
+    const columnCount = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0;
+    commit(updateWorkspaceLayout(doc, wsId, { ...workspaceLayout, columnCount }));
+  }
+
+  function onColumnGapChange(e: Event) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const raw = Number((e.currentTarget as HTMLInputElement).value);
+    const columnGap = Number.isFinite(raw)
+      ? Math.max(0, Math.round(raw))
+      : DEFAULT_WORKSPACE_LAYOUT.columnGap;
+    commit(updateWorkspaceLayout(doc, wsId, { ...workspaceLayout, columnGap }));
+  }
+
+  function onFluidChange(e: Event) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const fluid = (e.currentTarget as HTMLInputElement).checked;
+    commit(updateWorkspaceLayout(doc, wsId, { ...workspaceLayout, fluid }));
+  }
+
+  function onBlockTitleSize(size: BlockTitleSize) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    commit(updateBlockTitleSize(doc, wsId, size));
   }
 
   function onSearch(e: SubmitEvent) {
@@ -754,6 +805,50 @@
           <button class="popover-option" onclick={onRemoveBackground}>🗑️ Remove background</button>
         {/if}
         <div class="popover-divider"></div>
+        <span class="popover-title">Layout</span>
+        <label class="setting-row">
+          <span>Columns</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Auto"
+            value={workspaceLayout.columnCount || ""}
+            oninput={onColumnCountChange}
+          />
+        </label>
+        <label class="setting-row">
+          <span>Full width</span>
+          <input
+            type="checkbox"
+            checked={workspaceLayout.fluid}
+            onchange={onFluidChange}
+          />
+        </label>
+        <label class="setting-row">
+          <span>Gap (px)</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={workspaceLayout.columnGap}
+            oninput={onColumnGapChange}
+          />
+        </label>
+        <div class="popover-divider"></div>
+        <span class="popover-title">Block title size</span>
+        <div class="seg">
+          {#each BLOCK_TITLE_SIZE_OPTIONS as size (size)}
+            <button
+              type="button"
+              class:sel={blockTitleSize === size}
+              onclick={() => onBlockTitleSize(size)}
+            >
+              {BLOCK_TITLE_SIZE_LABEL[size]}
+            </button>
+          {/each}
+        </div>
+        <div class="popover-divider"></div>
         <p class="help-note">
           In private/incognito browsing, data is stored temporarily and is not shared between browsers.
         </p>
@@ -797,7 +892,14 @@
 <main>
   {#if active}
     {#if view === "links"}
-    <div class="cols">
+    <div
+      class="cols"
+      class:cols-exact={workspaceLayout.columnCount > 0}
+      class:cols-fixed={!workspaceLayout.fluid}
+      style:--cols-gap={`${workspaceLayout.columnGap}px`}
+      style:--cols-count={workspaceLayout.columnCount > 0 ? String(workspaceLayout.columnCount) : undefined}
+      style:--block-title-size={`${BLOCK_TITLE_SIZE_PX[blockTitleSize]}px`}
+    >
       {#each active.columns as column, columnIndex (column.id)}
         <section
           class="col"
