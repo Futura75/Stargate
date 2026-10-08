@@ -30,6 +30,10 @@ _Avoid_: Icon (reserved for the workspace's own icon)
 A generated fallback: the first letter of a link's domain on a background hue derived from that domain. Always present as the base layer.
 _Avoid_: Monogram, avatar, placeholder
 
+**Link style**:
+A per-block rendering mode for a block's links: `list` (favicon + title in rows), `detail` (favicon + title + URL second line), or `tiles` (large favicon + centered label). Defaults to `list`.
+_Avoid_: View mode, layout, display
+
 ### Kanban
 
 **Kanban board**:
@@ -69,5 +73,5 @@ A single JSON file containing everything: an envelope with `schemaVersion`, app 
 _Avoid_: Backup, snapshot, dump
 
 **schemaVersion**:
-A version string (currently `"1"`) in the export envelope identifying the data format; used to migrate or refuse imports.
+A version string (currently `"3"`) in the export envelope identifying the data format; used to migrate or refuse imports.
 _Avoid_: Version (alone), format version

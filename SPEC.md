@@ -1,7 +1,7 @@
-# Stargate — v1 Specification
+# Stargate — Specification
 
-> **Status:** decision-locked — assembled from the wayfinder map and tickets #2–#7. Ready to hand off to implementation sessions.
-> **Source of truth:** [Wayfinder map](https://github.com/Futura75/Stargate/issues/1) + ticket resolutions #2–#7; canonical terms in [`GLOSSARY.md`](./GLOSSARY.md).
+> **Status:** decision-locked — assembled from the wayfinder maps [#1](https://github.com/Futura75/Stargate/issues/1) (v1, tickets #2–#7) and [#25](https://github.com/Futura75/Stargate/issues/25) (link styles, tickets #26–#29). Ready to hand off to implementation sessions.
+> **Source of truth:** [Wayfinder map #1](https://github.com/Futura75/Stargate/issues/1) + resolutions #2–#7; [Wayfinder map #25](https://github.com/Futura75/Stargate/issues/25) + resolutions #26–#29; canonical terms in [`GLOSSARY.md`](./GLOSSARY.md).
 
 ## 1. Positioning
 
@@ -26,6 +26,7 @@ Stargate is an open-source **browser homepage**: a cozy, simple start page for b
 
 - Structure: **workspaces → columns → blocks (cards) → links**; drag & drop reorders and moves.
 - A **link** is a title + URL, with an optional favicon.
+- Links render in one of three per-block **link styles** — `list` / `detail` / `tiles` (see §3.7).
 - Add via inline form; delete via hover-reveal ✕; rename inline.
 
 ### 3.3 Kanban — the Kanban view (#5, verdict K1 "Inline")
@@ -64,13 +65,30 @@ Hard findings that constrain storage:
 - Iterative fit: quality 0.80 → 0.72 → 0.64, then dimensions 1920 → 1600 → 1280; reject the upload only if it still exceeds the cap.
 - Per-background cap: **≤ ~500 KB target / ~700 KB absolute** (base64). Alpha 0–100 over the theme's base colour.
 
+### 3.7 Link styles (#26, #27, #28)
+
+Every block renders its links in one of three **link styles**, chosen per block. The style is purely visual — the same links, the same interactions, no data difference.
+
+- **`list`** (default): the classic row — favicon + title, one link per line.
+- **`detail`**: a bordered card row per link — favicon (follows the block's `faviconSize`, sm/md/lg), bold title, and a second line with the **URL** (no protocol, truncated, muted). Title and URL truncate with an ellipsis and never overlap adjacent rows.
+- **`tiles`**: a wrapping grid — a **fixed 48px** favicon with the title (truncated, centered) beneath; no URL. Tiles wrap in an auto-fill grid (min ~72px per tile).
+
+Uniform across all three styles (#27):
+- Drag & drop reorders within a block and moves links across blocks/columns, as today.
+- Hover reveals the same ⚙/✕ controls; in `tiles` they are a badge at the tile's top-right corner, raised above the link so they stay clickable.
+- The inline "+" add form stays at the bottom of the block.
+
+The style is set with a segmented **Link style** control (List / Detail / Tiles) in the **Block settings** modal, alongside Title, Description, and Favicon size. Existing blocks default to `list` — no visual change after upgrade.
+
+**Deferred (not yet specified):** a per-link description field for `detail`'s second line; a workspace-level default style; alphabetical/manual sort within a style.
+
 ## 4. Data model & JSON schema (#6)
 
 Single JSON document; ordering is **positional** (array order is the order); all ids are **opaque random strings**, unique document-wide, never displayed.
 
 ```jsonc
 {
-  "schemaVersion": "1",
+  "schemaVersion": "3",
   "app": { "name": "Stargate", "version": "0.1.0" },
   "exportedAt": "2026-10-08T12:00:00Z",            // ISO 8601
   "settings": {
@@ -86,9 +104,15 @@ Single JSON document; ordering is **positional** (array order is the order); all
       "color": "#5f7161",           // hex
       "background": { "dataUrl": "data:image/webp;base64,…", "alpha": 80 },
       // dataUrl = null when none; compressed ≤ ~500KB target / 700KB abs. No presets in v1.
+      "layout": { "columnCount": 0, "fluid": true, "columnGap": 18 },  // optional; columnCount 0 = auto-wrap
+      "blockTitleSize": "md",        // optional: "sm" | "md" | "lg"
       "columns": [                  // Links view — positional order
         { "id": "c1", "title": "Daily", "blocks": [
-          { "id": "b1", "title": "News", "links": [
+          { "id": "b1", "title": "News",
+            "description": "optional block description",   // optional
+            "faviconSize": "md",                            // optional: "sm" | "md" | "lg"
+            "linkStyle": "list",                            // optional: "list" | "detail" | "tiles"; absent = "list"
+            "links": [
             { "id": "l1", "title": "Hacker News", "url": "https://news.ycombinator.com",
               "favicon": { "dataUrl": "data:image/png;base64,…", "source": "custom", "fetchedAt": "2026-10-08T08:00:00Z" } }
             // favicon optional; absent = letter tile. source ∈ "custom" | "direct" | "google-s2" | "duckduckgo".
@@ -107,7 +131,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 }
 ```
 
-**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64.
+**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64; `linkStyle` ∈ `list|detail|tiles` (absent = `list`, unknown values dropped on import). Schema history: v1 (initial) → v2 (workspace appearance + per-block settings) → v3 (link styles).
 
 ## 5. Storage & resilience (#3, #7)
 
@@ -122,7 +146,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 
 - Export = **single `.json`** with `schemaVersion`; backgrounds embedded as base64; favicons never remote URLs.
 - Import = **full replace** with explicit confirmation (no merge in v1); invalid/oversized favicons are dropped field-wise (the link survives).
-- Migration: `schemaVersion` **newer** than supported → **refuse** (current data untouched); **older** → run sequential migrations (mechanism reserved, empty in v1); **equal** → accept.
+- Migration: `schemaVersion` **newer** than supported → **refuse** (current data untouched); **older** → run sequential migrations (`1→2` fills workspace appearance and per-block settings; `2→3` fills `linkStyle: "list"`); **equal** → accept.
 
 ## 7. Non-goals for v1 (fog carried forward)
 
