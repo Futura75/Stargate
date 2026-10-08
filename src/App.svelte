@@ -53,8 +53,9 @@
   } from "./store/types";
 
   const loaded = loadState(localStorage);
-  let doc: StargateState = $state(loaded);
-  let activeId: string = $state(loaded.workspaces[0]?.id ?? "");
+  let doc: StargateState = $state(loaded.state);
+  let recovered: boolean = $state(loaded.recovered);
+  let activeId: string = $state(loaded.state.workspaces[0]?.id ?? "");
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
 
@@ -68,6 +69,9 @@
   let drag: DragPayload | null = $state(null);
   let settingsOpen: boolean = $state(false);
   let view: "links" | "kanban" = $state("links");
+  let storageError: string | null = $state(null);
+  let pendingSave: StargateState | null = $state(null);
+  let recompressing: boolean = $state(false);
   let expandedTaskId: string | null = $state(null);
   let expandedColumnId: string | null = $state(null);
   let notesDraft: string = $state("");
@@ -111,8 +115,48 @@
   });
 
   function commit(next: StargateState) {
-    doc = next;
-    saveState(localStorage, next);
+    try {
+      saveState(localStorage, next);
+      doc = next;
+      pendingSave = null;
+      storageError = null;
+    } catch (err) {
+      pendingSave = next;
+      storageError = err instanceof Error ? err.message : "Could not save your changes.";
+    }
+  }
+
+  function hasBackgroundImage(state: StargateState | null): boolean {
+    return state?.workspaces.some((w) => w.background.dataUrl !== null) ?? false;
+  }
+
+  const canRecompress = $derived(hasBackgroundImage(pendingSave));
+
+  async function onRecompress() {
+    const target = pendingSave;
+    if (!target) return;
+    recompressing = true;
+    try {
+      let next = target;
+      for (const w of next.workspaces) {
+        if (!w.background.dataUrl) continue;
+        const compressed = await browserCodec.compressImage(w.background.dataUrl);
+        next = setBackground(next, w.id, { dataUrl: compressed, alpha: w.background.alpha });
+      }
+      try {
+        saveState(localStorage, next);
+        doc = next;
+        pendingSave = null;
+        storageError = null;
+      } catch (err) {
+        pendingSave = next;
+        storageError = err instanceof Error ? err.message : "Could not save your changes.";
+      }
+    } catch (err) {
+      storageError = err instanceof Error ? err.message : "Could not re-compress the background image.";
+    } finally {
+      recompressing = false;
+    }
   }
 
   function engineUrl(engine: SearchEngine, query: string): string {
@@ -670,12 +714,34 @@
         {#if active?.background.dataUrl}
           <button class="popover-option" onclick={onRemoveBackground}>🗑️ Remove background</button>
         {/if}
+        <div class="popover-divider"></div>
+        <p class="help-note">
+          In private/incognito browsing, data is stored temporarily and is not shared between browsers.
+        </p>
       </div>
     {/if}
   </div>
   <button class="pill" onclick={onExport}>⬇ Export</button>
   <button class="pill" onclick={onImport}>⬆ Import</button>
 </div>
+
+{#if storageError}
+  <div class="notice error" role="alert">
+    <span>{storageError}</span>
+    {#if canRecompress}
+      <button class="notice-action" onclick={onRecompress} disabled={recompressing}>
+        {recompressing ? "Re-compressing…" : "Re-compress backgrounds"}
+      </button>
+    {/if}
+    <button class="notice-close" aria-label="Dismiss" onclick={() => (storageError = null)}>✕</button>
+  </div>
+{/if}
+{#if recovered}
+  <div class="notice info" role="status">
+    <span>Your data was recovered from a backup — re-add any background images.</span>
+    <button class="notice-close" aria-label="Dismiss" onclick={() => (recovered = false)}>✕</button>
+  </div>
+{/if}
 
 <div class="toolbar">
   <form class="search" onsubmit={onSearch}>

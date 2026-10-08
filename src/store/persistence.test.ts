@@ -19,20 +19,21 @@ describe("saveState / loadState", () => {
     const state = createDefaultState("2026-01-01T00:00:00.000Z");
     saveState(storage, state);
     expect(storage.data.has(STORAGE_KEY)).toBe(true);
-    expect(loadState(storage)).toEqual(state);
+    expect(loadState(storage).state).toEqual(state);
   });
 
   it("seeds and persists a default workspace on first load", () => {
     const storage = fakeStorage();
-    const state = loadState(storage);
+    const state = loadState(storage).state;
     expect(state.workspaces).toHaveLength(1);
     expect(storage.data.has(STORAGE_KEY)).toBe(true);
   });
 
   it("recovers with a fresh seed when the stored JSON is unparsable", () => {
     const storage = fakeStorage({ [STORAGE_KEY]: "{ not valid json" });
-    const state = loadState(storage);
-    expect(state.schemaVersion).toBe("1");
-    expect(state.workspaces).toHaveLength(1);
+    const result = loadState(storage);
+    expect(result.recovered).toBe(false);
+    expect(result.state.schemaVersion).toBe("1");
+    expect(result.state.workspaces).toHaveLength(1);
   });
 });
