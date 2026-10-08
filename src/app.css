@@ -955,3 +955,36 @@ body[data-resolved="dark"] .notice.error {
   border-color: var(--accent);
   color: var(--accent-ink);
 }
+
+/* ticket #21: per-link settings — custom title, url, favicon */
+
+.link-settings-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-settings-icon .favicon {
+  --favicon-size: 32px;
+}
+
+.link-settings-icon-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.link-settings-favicon-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.link-settings-favicon-actions button:not(.danger) {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}

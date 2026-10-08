@@ -21,6 +21,7 @@
     moveLink,
     moveTask,
     removeBackground,
+    removeFavicon,
     renameBlock,
     renameColumn,
     renameKanbanColumn,
@@ -32,6 +33,7 @@
     setBackgroundAlpha,
     setFavicon,
     setFaviconSource,
+    setLinkUrl,
     setSearchEngine,
     setTheme,
     updateBlockSettings,
@@ -93,6 +95,11 @@
   let settingsBlockId: string | null = $state(null);
   let settingsDescription: string = $state("");
   let settingsFaviconSize: FaviconSize = $state("sm");
+  let linkSettingsColumnId: string | null = $state(null);
+  let linkSettingsBlockId: string | null = $state(null);
+  let linkSettingsLinkId: string | null = $state(null);
+  let linkSettingsTitle: string = $state("");
+  let linkSettingsUrl: string = $state("");
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
@@ -214,9 +221,7 @@
     return null;
   }
 
-  function onPickIcon(column: Column, block: Block, link: Link) {
-    const wsId = active?.id;
-    if (!wsId) return;
+  function onPickIcon(wsId: string, columnId: string, blockId: string, linkId: string) {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -229,7 +234,7 @@
         if (!dataUrl) return;
         try {
           const favicon = await browserCodec.normalizeFavicon(dataUrl);
-          commit(setFavicon(doc, wsId, column.id, block.id, link.id, favicon));
+          commit(setFavicon(doc, wsId, columnId, blockId, linkId, favicon));
         } catch {
           window.alert("That image could not be used as a favicon (max 8 KB after scaling).");
         }
@@ -476,13 +481,92 @@
     closeBlockSettings();
   }
 
-  function onEditLink(column: Column, block: Block, link: Link) {
-    if (!active) return;
-    const title = prompt("Link title", link.title)?.trim();
-    if (title == null) return;
-    const url = prompt("Link URL", link.url)?.trim();
-    if (url == null) return;
-    commit(renameLink(doc, active.id, column.id, block.id, link.id, title || link.title, url || link.url));
+  function openLinkSettings(column: Column, block: Block, link: Link) {
+    linkSettingsColumnId = column.id;
+    linkSettingsBlockId = block.id;
+    linkSettingsLinkId = link.id;
+    linkSettingsTitle = link.title;
+    linkSettingsUrl = link.url;
+  }
+
+  function closeLinkSettings() {
+    linkSettingsColumnId = null;
+    linkSettingsBlockId = null;
+    linkSettingsLinkId = null;
+  }
+
+  function currentLinkSettings(): Link | null {
+    if (
+      !active ||
+      linkSettingsColumnId === null ||
+      linkSettingsBlockId === null ||
+      linkSettingsLinkId === null
+    ) {
+      return null;
+    }
+    const column = active.columns.find((c) => c.id === linkSettingsColumnId);
+    const block = column?.blocks.find((b) => b.id === linkSettingsBlockId);
+    return block?.links.find((l) => l.id === linkSettingsLinkId) ?? null;
+  }
+
+  function pickLinkFavicon() {
+    if (
+      !active ||
+      linkSettingsColumnId === null ||
+      linkSettingsBlockId === null ||
+      linkSettingsLinkId === null
+    ) {
+      return;
+    }
+    onPickIcon(active.id, linkSettingsColumnId, linkSettingsBlockId, linkSettingsLinkId);
+  }
+
+  function removeLinkFavicon() {
+    if (
+      !active ||
+      linkSettingsColumnId === null ||
+      linkSettingsBlockId === null ||
+      linkSettingsLinkId === null
+    ) {
+      return;
+    }
+    commit(removeFavicon(doc, active.id, linkSettingsColumnId, linkSettingsBlockId, linkSettingsLinkId));
+  }
+
+  function onLinkSettingsKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveLinkSettings();
+    } else if (e.key === "Escape") {
+      closeLinkSettings();
+    }
+  }
+
+  function saveLinkSettings() {
+    if (
+      !active ||
+      linkSettingsColumnId === null ||
+      linkSettingsBlockId === null ||
+      linkSettingsLinkId === null
+    ) {
+      return;
+    }
+    const link = currentLinkSettings();
+    if (!link) {
+      closeLinkSettings();
+      return;
+    }
+    const title = linkSettingsTitle.trim() || link.title;
+    const url = linkSettingsUrl.trim() || link.url;
+    let next = doc;
+    if (title !== link.title) {
+      next = renameLink(next, active.id, linkSettingsColumnId, linkSettingsBlockId, linkSettingsLinkId, title);
+    }
+    if (url !== link.url) {
+      next = setLinkUrl(next, active.id, linkSettingsColumnId, linkSettingsBlockId, linkSettingsLinkId, url);
+    }
+    if (next !== doc) commit(next);
+    closeLinkSettings();
   }
 
   function onDeleteLink(column: Column, block: Block, link: Link) {
@@ -987,8 +1071,7 @@
                       <span class="link-title">{link.title}</span>
                     </a>
                     <div class="mini-row">
-                      <button class="mini" title="Set favicon" onclick={() => onPickIcon(column, block, link)}>📷</button>
-                      <button class="mini" title="Edit link" onclick={() => onEditLink(column, block, link)}>✎</button>
+                      <button class="mini" title="Link settings" onclick={() => openLinkSettings(column, block, link)}>⚙</button>
                       <button class="mini" title="Delete link" onclick={() => onDeleteLink(column, block, link)}>✕</button>
                     </div>
                   </div>
@@ -1166,6 +1249,59 @@
       <div class="modal-actions">
         <button type="button" onclick={closeBlockSettings}>Cancel</button>
         <button type="button" class="primary" onclick={saveBlockSettings}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if linkSettingsColumnId !== null && linkSettingsBlockId !== null && linkSettingsLinkId !== null}
+  {@const link = currentLinkSettings()}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) closeLinkSettings();
+    }}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Link settings"
+      tabindex="-1"
+    >
+      <h2>Link settings</h2>
+      {#if link}
+        {@const tile = letterTile(domainOf(link.url))}
+        {@const favicon = link.favicon?.dataUrl}
+        <div class="link-settings-icon">
+          <span class="favicon" style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}>
+            {#if favicon}
+              <img class="favicon-img" src={favicon} alt="" width={32} height={32} draggable={false} />
+            {:else}
+              <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
+            {/if}
+          </span>
+          <span class="link-settings-icon-label">{favicon ? "Custom icon" : "Letter tile"}</span>
+        </div>
+        <div class="link-settings-favicon-actions">
+          <button type="button" onclick={pickLinkFavicon}>{favicon ? "Change favicon" : "Set favicon"}</button>
+          {#if favicon}
+            <button type="button" class="danger" onclick={removeLinkFavicon}>Remove favicon</button>
+          {/if}
+        </div>
+      {/if}
+      <label class="field">
+        <span>Title</span>
+        <input bind:value={linkSettingsTitle} placeholder="Title…" onkeydown={onLinkSettingsKeydown} />
+      </label>
+      <label class="field">
+        <span>URL</span>
+        <input bind:value={linkSettingsUrl} placeholder="https://…" onkeydown={onLinkSettingsKeydown} />
+      </label>
+      <div class="modal-actions">
+        <button type="button" onclick={closeLinkSettings}>Cancel</button>
+        <button type="button" class="primary" onclick={saveLinkSettings}>Save</button>
       </div>
     </div>
   </div>
