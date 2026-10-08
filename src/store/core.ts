@@ -722,6 +722,57 @@ export function deserialize(json: string): StargateState {
   return sanitizeFavicons(parsed);
 }
 
+export function exportState(state: StargateState, now = new Date().toISOString()): string {
+  return serialize({ ...state, exportedAt: now });
+}
+
+export function importState(json: string): StargateState {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("not a valid JSON file");
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("missing schemaVersion");
+  }
+  const raw = parsed as Record<string, unknown>;
+  if (typeof raw.schemaVersion !== "string") {
+    throw new Error("missing schemaVersion");
+  }
+  if (compareVersion(raw.schemaVersion, SCHEMA_VERSION) > 0) {
+    throw new Error("made by a newer version of Stargate");
+  }
+  const migrated = migrate(raw);
+  return deserialize(JSON.stringify(migrated));
+}
+
+/** Migration steps keyed by the version they upgrade FROM. Empty for v1. */
+const MIGRATIONS: Record<string, (state: any) => any> = {};
+
+/** Walk a state forward to SCHEMA_VERSION, applying one migration step per version. */
+function migrate(state: any): any {
+  let current = state;
+  while (current.schemaVersion !== SCHEMA_VERSION) {
+    const from = current.schemaVersion;
+    const step = MIGRATIONS[from];
+    if (!step) {
+      throw new Error(`cannot migrate from version ${from}`);
+    }
+    current = step(current);
+  }
+  return current;
+}
+
+function compareVersion(a: string, b: string): number {
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 function isState(x: unknown): x is StargateState {
   if (typeof x !== "object" || x === null) return false;
   const o = x as Record<string, unknown>;

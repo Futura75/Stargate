@@ -13,6 +13,8 @@
     deleteTask,
     deleteWorkspace,
     domainOf,
+    exportState,
+    importState,
     letterTile,
     MAX_BACKGROUND_BASE64,
     moveBlock,
@@ -216,6 +218,44 @@
   function cycleTheme() {
     const idx = THEME_CYCLE.indexOf(doc.settings.theme);
     commit(setTheme(doc, THEME_CYCLE[(idx + 1) % THEME_CYCLE.length]));
+  }
+
+  function onExport() {
+    const json = exportState(doc);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stargate-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function onImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = typeof reader.result === "string" ? reader.result : "";
+        if (!text) return;
+        let imported: StargateState;
+        try {
+          imported = importState(text);
+        } catch (err) {
+          window.alert(err instanceof Error ? err.message : "Could not import this file.");
+          return;
+        }
+        if (!confirm("Replace your current data with this file?")) return;
+        activeId = imported.workspaces[0]?.id ?? "";
+        commit(imported);
+      };
+      reader.readAsText(file);
+    });
+    input.click();
   }
 
   function createWorkspace() {
@@ -633,7 +673,8 @@
       </div>
     {/if}
   </div>
-  <button class="pill">{"{ } State"}</button>
+  <button class="pill" onclick={onExport}>⬇ Export</button>
+  <button class="pill" onclick={onImport}>⬆ Import</button>
 </div>
 
 <div class="toolbar">
