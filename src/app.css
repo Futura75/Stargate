@@ -253,3 +253,107 @@ form.inline button {
   padding: 8px 12px;
   font-size: 13px;
 }
+
+/* ticket #11: hover-reveal edit controls + drag affordances */
+
+.tab-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tab-wrap:hover .mini-row,
+.col-head:hover .mini-row,
+.block-head:hover .mini-row,
+.link-row:hover .mini-row {
+  opacity: 1;
+}
+
+button.mini {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: 6px;
+  padding: 2px 5px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+button.mini:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.tab-wrap .mini {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 6px;
+}
+
+.col-head,
+.block-head,
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.col-head h2 {
+  flex: 1;
+}
+
+.block-head {
+  margin-bottom: 9px;
+}
+
+.block-head h3 {
+  flex: 1;
+  margin: 0;
+}
+
+.link-row {
+  border-radius: 8px;
+  padding: 0 4px;
+  cursor: grab;
+}
+
+.link-row:active {
+  cursor: grabbing;
+}
+
+.link-row:hover {
+  background: var(--bg);
+}
+
+.link-row a {
+  flex: 1;
+  display: block;
+  padding: 6px 4px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.link-row a:hover {
+  background: transparent;
+}
+
+.col-head h2,
+.block-head h3 {
+  cursor: grab;
+}
+
+.col-head h2:active,
+.block-head h3:active {
+  cursor: grabbing;
+}

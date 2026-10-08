@@ -1,4 +1,4 @@
-import type { KanbanColumn, StargateState, Workspace } from "./types";
+import type { Block, Column, KanbanColumn, StargateState, Workspace } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
@@ -122,6 +122,318 @@ export function addLink(
         : w,
     ),
   };
+}
+
+function updateById<T extends { id: string }>(items: T[], id: string, patch: Partial<T>): T[] | null {
+  if (!items.some((item) => item.id === id)) return null;
+  return items.map((item) => (item.id === id ? { ...item, ...patch } : item));
+}
+
+function removeById<T extends { id: string }>(items: T[], id: string): T[] | null {
+  if (!items.some((item) => item.id === id)) return null;
+  return items.filter((item) => item.id !== id);
+}
+
+function moveById<T extends { id: string }>(items: T[], id: string, toIndex: number): T[] | null {
+  const fromIndex = items.findIndex((item) => item.id === id);
+  if (fromIndex === -1) return null;
+  const next = items.slice();
+  const [item] = next.splice(fromIndex, 1);
+  next.splice(clampIndex(toIndex, next.length), 0, item);
+  return next;
+}
+
+function clampIndex(index: number, length: number): number {
+  if (!Number.isFinite(index)) return length;
+  return Math.max(0, Math.min(index, length));
+}
+
+function mapWorkspace(
+  state: StargateState,
+  workspaceId: string,
+  patch: Partial<Workspace>,
+): StargateState | null {
+  if (!state.workspaces.some((w) => w.id === workspaceId)) return null;
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) => (w.id === workspaceId ? { ...w, ...patch } : w)),
+  };
+}
+
+function mapColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  patch: Partial<Column>,
+): StargateState | null {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace || !workspace.columns.some((c) => c.id === columnId)) return null;
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) =>
+      w.id === workspaceId
+        ? { ...w, columns: w.columns.map((c) => (c.id === columnId ? { ...c, ...patch } : c)) }
+        : w,
+    ),
+  };
+}
+
+function mapBlock(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  patch: Partial<Block>,
+): StargateState | null {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.columns.find((c) => c.id === columnId);
+  if (!column || !column.blocks.some((b) => b.id === blockId)) return null;
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) =>
+      w.id === workspaceId
+        ? {
+            ...w,
+            columns: w.columns.map((c) =>
+              c.id === columnId
+                ? { ...c, blocks: c.blocks.map((b) => (b.id === blockId ? { ...b, ...patch } : b)) }
+                : c,
+            ),
+          }
+        : w,
+    ),
+  };
+}
+
+export function renameWorkspace(
+  state: StargateState,
+  workspaceId: string,
+  name: string,
+): StargateState {
+  const workspaces = updateById(state.workspaces, workspaceId, { name });
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function updateWorkspace(
+  state: StargateState,
+  workspaceId: string,
+  patch: { icon?: string; color?: string },
+): StargateState {
+  const workspaces = updateById(state.workspaces, workspaceId, patch);
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function deleteWorkspace(state: StargateState, workspaceId: string): StargateState {
+  if (state.workspaces.length <= 1) return state;
+  const workspaces = removeById(state.workspaces, workspaceId);
+  return workspaces === null ? state : { ...state, workspaces };
+}
+
+export function renameColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  title: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const columns = updateById(workspace.columns, columnId, { title });
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { columns }) ?? state;
+}
+
+export function deleteColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const columns = removeById(workspace.columns, columnId);
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { columns }) ?? state;
+}
+
+export function renameBlock(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  title: string,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  if (!column) return state;
+  const blocks = updateById(column.blocks, blockId, { title });
+  if (blocks === null) return state;
+  return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
+}
+
+export function deleteBlock(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  if (!column) return state;
+  const blocks = removeById(column.blocks, blockId);
+  if (blocks === null) return state;
+  return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
+}
+
+export function renameLink(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+  title: string,
+  url: string,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  if (!block) return state;
+  const links = updateById(block.links, linkId, { title, url });
+  if (links === null) return state;
+  return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
+}
+
+export function deleteLink(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  if (!block) return state;
+  const links = removeById(block.links, linkId);
+  if (links === null) return state;
+  return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
+}
+
+export function reorderColumn(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  toIndex: number,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const columns = moveById(workspace.columns, columnId, toIndex);
+  if (columns === null) return state;
+  return mapWorkspace(state, workspaceId, { columns }) ?? state;
+}
+
+export function reorderBlock(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  toIndex: number,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  if (!column) return state;
+  const blocks = moveById(column.blocks, blockId, toIndex);
+  if (blocks === null) return state;
+  return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
+}
+
+export function reorderLink(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+  toIndex: number,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  if (!block) return state;
+  const links = moveById(block.links, linkId, toIndex);
+  if (links === null) return state;
+  return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
+}
+
+export function moveBlock(
+  state: StargateState,
+  workspaceId: string,
+  fromColumnId: string,
+  toColumnId: string,
+  blockId: string,
+  toIndex: number,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return state;
+  const fromColumn = workspace.columns.find((c) => c.id === fromColumnId);
+  const toColumn = workspace.columns.find((c) => c.id === toColumnId);
+  if (!fromColumn || !toColumn) return state;
+  const block = fromColumn.blocks.find((b) => b.id === blockId);
+  if (!block) return state;
+
+  if (fromColumnId === toColumnId) {
+    const blocks = moveById(fromColumn.blocks, blockId, toIndex);
+    if (blocks === null) return state;
+    return mapColumn(state, workspaceId, fromColumnId, { blocks }) ?? state;
+  }
+
+  const fromBlocks = fromColumn.blocks.filter((b) => b.id !== blockId);
+  const toBlocks = toColumn.blocks.slice();
+  toBlocks.splice(clampIndex(toIndex, toBlocks.length), 0, block);
+  const columns = workspace.columns.map((c) => {
+    if (c.id === fromColumnId) return { ...c, blocks: fromBlocks };
+    if (c.id === toColumnId) return { ...c, blocks: toBlocks };
+    return c;
+  });
+  return mapWorkspace(state, workspaceId, { columns }) ?? state;
+}
+
+export function moveLink(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  fromBlockId: string,
+  toBlockId: string,
+  linkId: string,
+  toIndex: number,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.columns.find((c) => c.id === columnId);
+  if (!column) return state;
+  const fromBlock = column.blocks.find((b) => b.id === fromBlockId);
+  const toBlock = column.blocks.find((b) => b.id === toBlockId);
+  if (!fromBlock || !toBlock) return state;
+  const link = fromBlock.links.find((l) => l.id === linkId);
+  if (!link) return state;
+
+  if (fromBlockId === toBlockId) {
+    const links = moveById(fromBlock.links, linkId, toIndex);
+    if (links === null) return state;
+    return mapBlock(state, workspaceId, columnId, fromBlockId, { links }) ?? state;
+  }
+
+  const fromLinks = fromBlock.links.filter((l) => l.id !== linkId);
+  const toLinks = toBlock.links.slice();
+  toLinks.splice(clampIndex(toIndex, toLinks.length), 0, link);
+  const blocks = column.blocks.map((b) => {
+    if (b.id === fromBlockId) return { ...b, links: fromLinks };
+    if (b.id === toBlockId) return { ...b, links: toLinks };
+    return b;
+  });
+  return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
 }
 
 export function createDefaultState(now = new Date().toISOString()): StargateState {

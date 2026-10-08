@@ -1,13 +1,37 @@
 <script lang="ts">
-  import { addBlock, addColumn, addLink, addWorkspace } from "./store/core";
+  import {
+    addBlock,
+    addColumn,
+    addLink,
+    addWorkspace,
+    deleteBlock,
+    deleteColumn,
+    deleteLink,
+    deleteWorkspace,
+    moveBlock,
+    moveLink,
+    renameBlock,
+    renameColumn,
+    renameLink,
+    renameWorkspace,
+    reorderColumn,
+    updateWorkspace,
+  } from "./store/core";
   import { loadState, saveState } from "./store/persistence";
-  import type { Block, Column, StargateState } from "./store/types";
+  import type { Block, Column, Link, StargateState, Workspace } from "./store/types";
 
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded);
   let activeId: string = $state(loaded.workspaces[0]?.id ?? "");
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
+
+  type DragPayload =
+    | { kind: "column"; columnId: string }
+    | { kind: "block"; columnId: string; blockId: string }
+    | { kind: "link"; columnId: string; blockId: string; linkId: string };
+
+  let drag: DragPayload | null = $state(null);
 
   function commit(next: StargateState) {
     doc = next;
@@ -50,13 +74,157 @@
     commit(addLink(doc, active.id, column.id, block.id, value));
     if (input) input.value = "";
   }
+
+  function onRenameWorkspace(ws: Workspace) {
+    const name = prompt("Workspace name", ws.name)?.trim();
+    if (!name) return;
+    commit(renameWorkspace(doc, ws.id, name));
+  }
+
+  function onEditWorkspace(ws: Workspace) {
+    const icon = (prompt("Workspace icon (emoji)", ws.icon)?.trim()) || ws.icon;
+    const color = (prompt("Workspace color (hex)", ws.color)?.trim()) || ws.color;
+    commit(updateWorkspace(doc, ws.id, { icon, color }));
+  }
+
+  function onDeleteWorkspace(ws: Workspace) {
+    if (doc.workspaces.length <= 1) return;
+    if (!confirm(`Delete workspace “${ws.name}”?`)) return;
+    const next = deleteWorkspace(doc, ws.id);
+    if (next === doc) return;
+    if (activeId === ws.id) activeId = next.workspaces[0]?.id ?? "";
+    commit(next);
+  }
+
+  function onRenameColumn(column: Column) {
+    if (!active) return;
+    const title = prompt("Column name", column.title)?.trim();
+    if (!title) return;
+    commit(renameColumn(doc, active.id, column.id, title));
+  }
+
+  function onDeleteColumn(column: Column) {
+    if (!active) return;
+    if (!confirm(`Delete column “${column.title}” and all its blocks?`)) return;
+    commit(deleteColumn(doc, active.id, column.id));
+  }
+
+  function onRenameBlock(column: Column, block: Block) {
+    if (!active) return;
+    const title = prompt("Block name", block.title)?.trim();
+    if (!title) return;
+    commit(renameBlock(doc, active.id, column.id, block.id, title));
+  }
+
+  function onDeleteBlock(column: Column, block: Block) {
+    if (!active) return;
+    if (!confirm(`Delete block “${block.title}”?`)) return;
+    commit(deleteBlock(doc, active.id, column.id, block.id));
+  }
+
+  function onEditLink(column: Column, block: Block, link: Link) {
+    if (!active) return;
+    const title = prompt("Link title", link.title)?.trim();
+    if (title == null) return;
+    const url = prompt("Link URL", link.url)?.trim();
+    if (url == null) return;
+    commit(renameLink(doc, active.id, column.id, block.id, link.id, title || link.title, url || link.url));
+  }
+
+  function onDeleteLink(column: Column, block: Block, link: Link) {
+    if (!active) return;
+    if (!confirm(`Delete link “${link.title}”?`)) return;
+    commit(deleteLink(doc, active.id, column.id, block.id, link.id));
+  }
+
+  function startDrag(e: DragEvent, payload: DragPayload) {
+    drag = payload;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", payload.kind);
+    }
+  }
+
+  function endDrag() {
+    drag = null;
+  }
+
+  function columnDragOver(e: DragEvent) {
+    if (!drag) return;
+    if (drag.kind !== "column" && drag.kind !== "block") return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function blockDragOver(e: DragEvent) {
+    if (!drag) return;
+    if (drag.kind !== "block" && drag.kind !== "link") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function linkDragOver(e: DragEvent) {
+    if (!drag || drag.kind !== "link") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function dropOnColumn(e: DragEvent, column: Column, columnIndex: number) {
+    if (!active || !drag) return;
+    if (drag.kind !== "column" && drag.kind !== "block") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    if (payload.kind === "column") {
+      commit(reorderColumn(doc, active.id, payload.columnId, columnIndex));
+    } else {
+      commit(moveBlock(doc, active.id, payload.columnId, column.id, payload.blockId, column.blocks.length));
+    }
+  }
+
+  function dropOnBlock(e: DragEvent, column: Column, blockIndex: number, block: Block) {
+    if (!active || !drag) return;
+    if (drag.kind !== "block" && drag.kind !== "link") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    if (payload.kind === "block") {
+      commit(moveBlock(doc, active.id, payload.columnId, column.id, payload.blockId, blockIndex));
+    } else {
+      commit(moveLink(doc, active.id, column.id, payload.blockId, block.id, payload.linkId, block.links.length));
+    }
+  }
+
+  function dropOnLink(e: DragEvent, column: Column, block: Block, linkIndex: number) {
+    if (!active || !drag || drag.kind !== "link") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    commit(moveLink(doc, active.id, column.id, payload.blockId, block.id, payload.linkId, linkIndex));
+  }
 </script>
 
 <div class="topbar">
   {#each doc.workspaces as ws (ws.id)}
-    <button class="tab" class:active={ws.id === active?.id} onclick={() => (activeId = ws.id)}>
-      {ws.icon} {ws.name}
-    </button>
+    {#if ws.id === active?.id}
+      <div class="tab-wrap">
+        <button class="tab active" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
+        <div class="mini-row">
+          <button class="mini" title="Rename workspace" onclick={() => onRenameWorkspace(ws)}>✎</button>
+          <button class="mini" title="Workspace icon & color" onclick={() => onEditWorkspace(ws)}>🎨</button>
+          {#if doc.workspaces.length > 1}
+            <button class="mini" title="Delete workspace" onclick={() => onDeleteWorkspace(ws)}>✕</button>
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <button class="tab" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
+    {/if}
   {/each}
   <button class="tab add" onclick={createWorkspace}>＋ Add</button>
   <div class="spacer"></div>
@@ -83,29 +251,79 @@
 <main>
   {#if active}
     <div class="cols">
-      {#each active.columns as column (column.id)}
-        <section class="col">
-          <h2>{column.title}</h2>
-          {#each column.blocks as block (block.id)}
-            <article class="block">
-              <h3>{block.title}</h3>
-              <div class="links">
-                {#each block.links as link (link.id)}
-                  <a href={link.url} target="_blank" rel="noreferrer">{link.title}</a>
+      {#each active.columns as column, columnIndex (column.id)}
+        <section
+          class="col"
+          role="group"
+          aria-label={`${column.title} column`}
+          ondragover={columnDragOver}
+          ondrop={(e) => dropOnColumn(e, column, columnIndex)}
+        >
+          <header class="col-head">
+            <h2
+              draggable={true}
+              ondragstart={(e) => startDrag(e, { kind: "column", columnId: column.id })}
+              ondragend={endDrag}
+            >
+              {column.title}
+            </h2>
+            <div class="mini-row">
+              <button class="mini" title="Rename column" onclick={() => onRenameColumn(column)}>✎</button>
+              <button class="mini" title="Delete column" onclick={() => onDeleteColumn(column)}>✕</button>
+            </div>
+          </header>
+
+          {#each column.blocks as block, blockIndex (block.id)}
+            <article class="block" ondragover={blockDragOver} ondrop={(e) => dropOnBlock(e, column, blockIndex, block)}>
+              <header class="block-head">
+                <h3
+                  draggable={true}
+                  ondragstart={(e) => startDrag(e, { kind: "block", columnId: column.id, blockId: block.id })}
+                  ondragend={endDrag}
+                >
+                  {block.title}
+                </h3>
+                <div class="mini-row">
+                  <button class="mini" title="Rename block" onclick={() => onRenameBlock(column, block)}>✎</button>
+                  <button class="mini" title="Delete block" onclick={() => onDeleteBlock(column, block)}>✕</button>
+                </div>
+              </header>
+
+              <div class="links" role="list">
+                {#each block.links as link, linkIndex (link.id)}
+                  <div
+                    class="link-row"
+                    role="listitem"
+                    draggable={true}
+                    ondragstart={(e) =>
+                      startDrag(e, { kind: "link", columnId: column.id, blockId: block.id, linkId: link.id })}
+                    ondragend={endDrag}
+                    ondragover={linkDragOver}
+                    ondrop={(e) => dropOnLink(e, column, block, linkIndex)}
+                  >
+                    <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>{link.title}</a>
+                    <div class="mini-row">
+                      <button class="mini" title="Edit link" onclick={() => onEditLink(column, block, link)}>✎</button>
+                      <button class="mini" title="Delete link" onclick={() => onDeleteLink(column, block, link)}>✕</button>
+                    </div>
+                  </div>
                 {/each}
               </div>
+
               <form class="inline" onsubmit={(e) => addLinkForm(e, column, block)}>
                 <input placeholder="Title https://… (or just a domain)" />
                 <button type="submit">＋</button>
               </form>
             </article>
           {/each}
+
           <form class="inline" onsubmit={(e) => addBlockForm(e, column)}>
             <input placeholder="New block title…" />
             <button type="submit">＋</button>
           </form>
         </section>
       {/each}
+
       <form class="addcol" onsubmit={addColumnForm}>
         <input placeholder="New column title…" />
         <button type="submit">＋ Column</button>
