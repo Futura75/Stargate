@@ -1,6 +1,6 @@
 import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
-export const SCHEMA_VERSION = "1" as const;
+export const SCHEMA_VERSION = "2" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
 export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
@@ -766,9 +766,9 @@ export function serialize(state: StargateState): string {
 export function deserialize(json: string): StargateState {
   const parsed: unknown = JSON.parse(json);
   if (!isState(parsed)) {
-    throw new Error('Invalid Stargate state: expected schemaVersion "1" with a workspaces array');
+    throw new Error(`Invalid Stargate state: expected schemaVersion "${SCHEMA_VERSION}" with a workspaces array`);
   }
-  return sanitizeFavicons(parsed);
+  return sanitizeState(parsed);
 }
 
 export function exportState(state: StargateState, now = new Date().toISOString()): string {
@@ -796,8 +796,31 @@ export function importState(json: string): StargateState {
   return deserialize(JSON.stringify(migrated));
 }
 
-/** Migration steps keyed by the version they upgrade FROM. Empty for v1. */
-const MIGRATIONS: Record<string, (state: any) => any> = {};
+/** Migration steps keyed by the version they upgrade FROM. */
+const MIGRATIONS: Record<string, (state: any) => any> = {
+  "1": migrateV1toV2,
+};
+
+/** v1 → v2: fill the new optional appearance/settings fields with their defaults. */
+function migrateV1toV2(state: any): any {
+  return {
+    ...state,
+    schemaVersion: SCHEMA_VERSION,
+    workspaces: (state.workspaces ?? []).map((w: any) => ({
+      ...w,
+      layout: w.layout ?? DEFAULT_WORKSPACE_LAYOUT,
+      blockTitleSize: w.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE,
+      columns: (w.columns ?? []).map((c: any) => ({
+        ...c,
+        blocks: (c.blocks ?? []).map((b: any) => ({
+          ...b,
+          description: b.description ?? "",
+          faviconSize: b.faviconSize ?? "sm",
+        })),
+      })),
+    })),
+  };
+}
 
 /** Walk a state forward to SCHEMA_VERSION, applying one migration step per version. */
 function migrate(state: any): any {
@@ -834,20 +857,59 @@ function isState(x: unknown): x is StargateState {
 }
 
 const FAVICON_SOURCES = new Set(["custom", "direct", "google-s2", "duckduckgo"]);
+const SIZES = new Set(["sm", "md", "lg"]);
 
-function sanitizeFavicons(state: StargateState): StargateState {
+function sanitizeState(state: StargateState): StargateState {
   return {
     ...state,
-    workspaces: state.workspaces.map((w) => ({
-      ...w,
-      columns: (w.columns ?? []).map((c) => ({
-        ...c,
-        blocks: (c.blocks ?? []).map((b) => ({
-          ...b,
-          links: (b.links ?? []).map(sanitizeLink),
-        })),
-      })),
-    })),
+    workspaces: state.workspaces.map(sanitizeWorkspace),
+  };
+}
+
+function sanitizeWorkspace(w: Workspace): Workspace {
+  const sanitized: Workspace = {
+    ...w,
+    columns: (w.columns ?? []).map(sanitizeColumn),
+  };
+  const layout = sanitizeLayout(w.layout);
+  if (layout === undefined) delete sanitized.layout;
+  else sanitized.layout = layout;
+  if (!isSize(w.blockTitleSize)) delete sanitized.blockTitleSize;
+  return sanitized;
+}
+
+function sanitizeColumn(c: Column): Column {
+  return {
+    ...c,
+    blocks: (c.blocks ?? []).map(sanitizeBlock),
+  };
+}
+
+function sanitizeBlock(b: Block): Block {
+  const sanitized: Block = {
+    ...b,
+    links: (b.links ?? []).map(sanitizeLink),
+  };
+  if (typeof b.description !== "string") delete sanitized.description;
+  if (!isSize(b.faviconSize)) delete sanitized.faviconSize;
+  return sanitized;
+}
+
+function isSize(x: unknown): boolean {
+  return typeof x === "string" && SIZES.has(x);
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function sanitizeLayout(layout: unknown): WorkspaceLayout | undefined {
+  if (typeof layout !== "object" || layout === null) return undefined;
+  const l = layout as Record<string, unknown>;
+  return {
+    columnCount: finiteNumber(l.columnCount, 0),
+    fluid: typeof l.fluid === "boolean" ? l.fluid : DEFAULT_WORKSPACE_LAYOUT.fluid,
+    columnGap: finiteNumber(l.columnGap, DEFAULT_WORKSPACE_LAYOUT.columnGap),
   };
 }
 

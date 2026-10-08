@@ -38,7 +38,7 @@ describe("exportState", () => {
   it("produces the schema envelope with app, exportedAt, settings, and workspaces", () => {
     const s = withAssets();
     const parsed = JSON.parse(exportState(s, "2026-06-06T06:06:06.000Z")) as StargateState;
-    expect(parsed.schemaVersion).toBe("1");
+    expect(parsed.schemaVersion).toBe("2");
     expect(parsed.app).toEqual({ name: "Stargate", version: "0.1.0" });
     expect(parsed.exportedAt).toBe("2026-06-06T06:06:06.000Z");
     expect(parsed.settings).toEqual(s.settings);
@@ -94,7 +94,7 @@ describe("importState", () => {
   });
 
   it("refuses a newer schemaVersion", () => {
-    expect(() => importState(JSON.stringify({ schemaVersion: "2", settings: {}, workspaces: [] }))).toThrow(
+    expect(() => importState(JSON.stringify({ schemaVersion: "3", settings: {}, workspaces: [] }))).toThrow(
       "made by a newer version of Stargate",
     );
   });

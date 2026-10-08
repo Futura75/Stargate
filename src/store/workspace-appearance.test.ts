@@ -94,7 +94,7 @@ describe("appearance settings round-trip", () => {
     expect(importState(exportState(s, "2026-01-01T00:00:00.000Z"))).toEqual(s);
   });
 
-  it("imports old data without layout or block title size unchanged", () => {
+  it("imports a v2 document without layout or block title size unchanged", () => {
     const s = state();
     const imported = importState(JSON.stringify(s));
     expect(imported.workspaces[0].layout).toBeUndefined();

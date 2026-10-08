@@ -77,7 +77,7 @@ export interface Workspace {
 }
 
 export interface StargateState {
-  schemaVersion: "1";
+  schemaVersion: "2";
   app: { name: string; version: string };
   exportedAt: string;
   settings: Settings;

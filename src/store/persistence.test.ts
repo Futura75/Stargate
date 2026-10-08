@@ -33,7 +33,7 @@ describe("saveState / loadState", () => {
     const storage = fakeStorage({ [STORAGE_KEY]: "{ not valid json" });
     const result = loadState(storage);
     expect(result.recovered).toBe(false);
-    expect(result.state.schemaVersion).toBe("1");
+    expect(result.state.schemaVersion).toBe("2");
     expect(result.state.workspaces).toHaveLength(1);
   });
 });
