@@ -69,5 +69,5 @@ A single JSON file containing everything: an envelope with `schemaVersion`, app 
 _Avoid_: Backup, snapshot, dump
 
 **schemaVersion**:
-A number in the export envelope identifying the data format; used to migrate or refuse imports.
+A version string (currently `"1"`) in the export envelope identifying the data format; used to migrate or refuse imports.
 _Avoid_: Version (alone), format version
