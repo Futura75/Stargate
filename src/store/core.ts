@@ -1,9 +1,10 @@
-import type { Block, Column, KanbanColumn, SearchEngine, StargateState, Theme, Workspace } from "./types";
+import type { Block, Column, Favicon, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
 export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
+export const MAX_FAVICON_BASE64 = 8192;
 
 /** Opaque, unique, random id — never displayed. */
 export function newId(): string {
@@ -23,6 +24,28 @@ export function domainOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Deterministic 0–359 hue derived from a string (FNV-1a). */
+export function hueOf(s: string): number {
+  let hash = 2166136261;
+  for (const ch of s) {
+    hash ^= ch.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % 360;
+}
+
+/** Uppercase first Unicode code point of a domain. */
+export function firstLetter(domain: string): string {
+  const first = Array.from(domain.trim())[0];
+  return first ? first.toUpperCase() : "";
+}
+
+/** Letter tile: first letter + deterministic hue, the offline base favicon tier. */
+export function letterTile(domain: string): { letter: string; hue: number } {
+  const d = domain.trim();
+  return { letter: firstLetter(d), hue: hueOf(d) };
 }
 
 /**
@@ -70,6 +93,10 @@ export function setSearchEngine(state: StargateState, engine: SearchEngine): Sta
 
 export function setTheme(state: StargateState, theme: Theme): StargateState {
   return { ...state, settings: { ...state.settings, theme } };
+}
+
+export function setFaviconSource(state: StargateState, source: FaviconSource): StargateState {
+  return { ...state, settings: { ...state.settings, faviconSource: source } };
 }
 
 export function addColumn(state: StargateState, workspaceId: string, title: string): StargateState {
@@ -329,6 +356,71 @@ export function deleteLink(
   return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
 }
 
+function mapLink(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+  update: (link: Link) => Link,
+): StargateState | null {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  if (!block || !block.links.some((l) => l.id === linkId)) return null;
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) =>
+      w.id === workspaceId
+        ? {
+            ...w,
+            columns: w.columns.map((c) =>
+              c.id === columnId
+                ? {
+                    ...c,
+                    blocks: c.blocks.map((b) =>
+                      b.id === blockId
+                        ? { ...b, links: b.links.map((l) => (l.id === linkId ? update(l) : l)) }
+                        : b,
+                    ),
+                  }
+                : c,
+            ),
+          }
+        : w,
+    ),
+  };
+}
+
+export function setFavicon(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+  favicon: Favicon,
+): StargateState {
+  return mapLink(state, workspaceId, columnId, blockId, linkId, (l) => ({ ...l, favicon })) ?? state;
+}
+
+export function removeFavicon(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
+): StargateState {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  const column = workspace?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  const link = block?.links.find((l) => l.id === linkId);
+  if (!link || link.favicon === undefined) return state;
+  return mapLink(state, workspaceId, columnId, blockId, linkId, (l) => {
+    const { favicon: _removed, ...rest } = l;
+    return rest;
+  }) ?? state;
+}
+
 export function reorderColumn(
   state: StargateState,
   workspaceId: string,
@@ -471,7 +563,7 @@ export function deserialize(json: string): StargateState {
   if (!isState(parsed)) {
     throw new Error('Invalid Stargate state: expected schemaVersion "1" with a workspaces array');
   }
-  return parsed;
+  return sanitizeFavicons(parsed);
 }
 
 function isState(x: unknown): x is StargateState {
@@ -483,4 +575,42 @@ function isState(x: unknown): x is StargateState {
     typeof o.settings === "object" &&
     o.settings !== null
   );
+}
+
+const FAVICON_SOURCES = new Set(["custom", "direct", "google-s2", "duckduckgo"]);
+
+function sanitizeFavicons(state: StargateState): StargateState {
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) => ({
+      ...w,
+      columns: (w.columns ?? []).map((c) => ({
+        ...c,
+        blocks: (c.blocks ?? []).map((b) => ({
+          ...b,
+          links: (b.links ?? []).map(sanitizeLink),
+        })),
+      })),
+    })),
+  };
+}
+
+function sanitizeLink(link: Link): Link {
+  if (link.favicon === undefined) return link;
+  const favicon = sanitizeFavicon(link.favicon);
+  if (favicon === undefined) {
+    const { favicon: _dropped, ...rest } = link;
+    return rest;
+  }
+  return { ...link, favicon };
+}
+
+function sanitizeFavicon(favicon: unknown): Favicon | undefined {
+  if (typeof favicon !== "object" || favicon === null) return undefined;
+  const f = favicon as Record<string, unknown>;
+  if (typeof f.dataUrl !== "string" || !f.dataUrl.startsWith("data:")) return undefined;
+  if (f.dataUrl.length > MAX_FAVICON_BASE64) return undefined;
+  if (typeof f.source !== "string" || !FAVICON_SOURCES.has(f.source)) return undefined;
+  if (typeof f.fetchedAt !== "string") return undefined;
+  return favicon as Favicon;
 }

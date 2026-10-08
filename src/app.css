@@ -347,7 +347,9 @@ button.mini:hover {
 
 .link-row a {
   flex: 1;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 4px;
   border-radius: 8px;
   text-decoration: none;
@@ -367,4 +369,93 @@ button.mini:hover {
 .col-head h2:active,
 .block-head h3:active {
   cursor: grabbing;
+}
+
+/* ticket #13: favicons — letter tile base, stored icon, opt-in remote tier */
+
+.popover-wrap {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  z-index: 20;
+}
+
+.popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  padding: 2px 8px;
+}
+
+.popover-option {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.popover-option:hover {
+  background: var(--bg);
+}
+
+.popover-option.sel {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.link-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #fff;
+}
+
+.tile-letter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  z-index: 0;
+}
+
+.favicon-img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  object-fit: contain;
+  background: transparent;
 }

@@ -8,6 +8,8 @@
     deleteColumn,
     deleteLink,
     deleteWorkspace,
+    domainOf,
+    letterTile,
     moveBlock,
     moveLink,
     renameBlock,
@@ -15,12 +17,15 @@
     renameLink,
     renameWorkspace,
     reorderColumn,
+    setFavicon,
+    setFaviconSource,
     setSearchEngine,
     setTheme,
     updateWorkspace,
   } from "./store/core";
+  import { browserCodec } from "./store/codec";
   import { loadState, saveState } from "./store/persistence";
-  import type { Block, Column, Link, SearchEngine, StargateState, Theme, Workspace } from "./store/types";
+  import type { Block, Column, FaviconSource, Link, SearchEngine, StargateState, Theme, Workspace } from "./store/types";
 
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded);
@@ -34,12 +39,20 @@
     | { kind: "link"; columnId: string; blockId: string; linkId: string };
 
   let drag: DragPayload | null = $state(null);
+  let faviconMenuOpen: boolean = $state(false);
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
   const THEME_LABEL: Record<Theme, string> = {
     light: "☀️ Light",
     dark: "🌙 Dark",
     system: "🌗 System",
+  };
+
+  const FAVICON_SOURCE_OPTIONS: FaviconSource[] = ["off", "google-s2", "duckduckgo"];
+  const FAVICON_SOURCE_LABEL: Record<FaviconSource, string> = {
+    off: "Off",
+    "google-s2": "Google",
+    duckduckgo: "DuckDuckGo",
   };
 
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -72,6 +85,41 @@
     if (engine === "ddg") return `https://duckduckgo.com/?q=${q}`;
     if (engine === "bing") return `https://www.bing.com/search?q=${q}`;
     return `https://www.google.com/search?q=${q}`;
+  }
+
+  function remoteFaviconUrl(domain: string, source: FaviconSource): string | null {
+    if (source === "google-s2") {
+      return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+    }
+    if (source === "duckduckgo") {
+      return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;
+    }
+    return null;
+  }
+
+  function onPickIcon(column: Column, block: Block, link: Link) {
+    const wsId = active?.id;
+    if (!wsId) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        if (!dataUrl) return;
+        try {
+          const favicon = await browserCodec.normalizeFavicon(dataUrl);
+          commit(setFavicon(doc, wsId, column.id, block.id, link.id, favicon));
+        } catch {
+          window.alert("That image could not be used as a favicon (max 8 KB after scaling).");
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    input.click();
   }
 
   function onSearch(e: SubmitEvent) {
@@ -287,6 +335,35 @@
     <button disabled title="Coming in ticket #15">📋 Kanban</button>
   </div>
   <button class="pill" onclick={cycleTheme}>{THEME_LABEL[doc.settings.theme]}</button>
+  <div class="popover-wrap">
+    <button
+      class="pill"
+      title="Favicon source"
+      aria-haspopup="menu"
+      onclick={() => (faviconMenuOpen = !faviconMenuOpen)}
+    >
+      ⚙ Favicons
+    </button>
+    {#if faviconMenuOpen}
+      <div class="popover" role="menu">
+        <span class="popover-title">Favicon source</span>
+        {#each FAVICON_SOURCE_OPTIONS as source (source)}
+          <button
+            class="popover-option"
+            class:sel={doc.settings.faviconSource === source}
+            role="menuitemradio"
+            aria-checked={doc.settings.faviconSource === source}
+            onclick={() => {
+              commit(setFaviconSource(doc, source));
+              faviconMenuOpen = false;
+            }}
+          >
+            {FAVICON_SOURCE_LABEL[source]}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
   <button class="pill">{"{ } State"}</button>
 </div>
 
@@ -345,6 +422,9 @@
 
               <div class="links" role="list">
                 {#each block.links as link, linkIndex (link.id)}
+                  {@const tile = letterTile(domainOf(link.url))}
+                  {@const favicon = link.favicon?.dataUrl}
+                  {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
                   <div
                     class="link-row"
                     role="listitem"
@@ -355,8 +435,30 @@
                     ondragover={linkDragOver}
                     ondrop={(e) => dropOnLink(e, column, block, linkIndex)}
                   >
-                    <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>{link.title}</a>
+                    <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>
+                      <span class="favicon" style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}>
+                        {#if favicon}
+                          <img class="favicon-img" src={favicon} alt="" width="16" height="16" draggable={false} />
+                        {:else}
+                          <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
+                          {#if remote}
+                            <img
+                              class="favicon-img favicon-remote"
+                              loading="lazy"
+                              src={remote}
+                              alt=""
+                              width="16"
+                              height="16"
+                              draggable={false}
+                              onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                            />
+                          {/if}
+                        {/if}
+                      </span>
+                      <span class="link-title">{link.title}</span>
+                    </a>
                     <div class="mini-row">
+                      <button class="mini" title="Set favicon" onclick={() => onPickIcon(column, block, link)}>📷</button>
                       <button class="mini" title="Edit link" onclick={() => onEditLink(column, block, link)}>✎</button>
                       <button class="mini" title="Delete link" onclick={() => onDeleteLink(column, block, link)}>✕</button>
                     </div>
