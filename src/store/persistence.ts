@@ -1,4 +1,4 @@
-import { createDefaultState, deserialize, serialize } from "./core";
+import { createDefaultState, importState, serialize } from "./core";
 import type { StargateState } from "./types";
 
 export const STORAGE_KEY = "stargate.v1";
@@ -114,7 +114,7 @@ export function loadState(storage: StorageLike, now?: string): LoadResult {
   const raw = storage.getItem(STORAGE_KEY);
   if (raw !== null) {
     try {
-      return { state: deserialize(raw), recovered: false };
+      return { state: importState(raw), recovered: false };
     } catch {
       // main key is unparsable — fall through to the shadow copy
     }
@@ -123,7 +123,7 @@ export function loadState(storage: StorageLike, now?: string): LoadResult {
   const shadow = storage.getItem(SHADOW_KEY);
   if (shadow !== null) {
     try {
-      const state = deserialize(shadow);
+      const state = importState(shadow);
       try {
         saveState(storage, state);
       } catch {
