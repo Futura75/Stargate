@@ -1,4 +1,4 @@
-import type { Block, Column, KanbanColumn, StargateState, Workspace } from "./types";
+import type { Block, Column, KanbanColumn, SearchEngine, StargateState, Theme, Workspace } from "./types";
 
 export const SCHEMA_VERSION = "1" as const;
 export const APP_NAME = "Stargate" as const;
@@ -62,6 +62,14 @@ export function addWorkspace(
   input: { name: string; icon: string; color: string },
 ): StargateState {
   return { ...state, workspaces: [...state.workspaces, newWorkspace(input)] };
+}
+
+export function setSearchEngine(state: StargateState, engine: SearchEngine): StargateState {
+  return { ...state, settings: { ...state.settings, searchEngine: engine } };
+}
+
+export function setTheme(state: StargateState, theme: Theme): StargateState {
+  return { ...state, settings: { ...state.settings, theme } };
 }
 
 export function addColumn(state: StargateState, workspaceId: string, title: string): StargateState {

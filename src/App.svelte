@@ -15,10 +15,12 @@
     renameLink,
     renameWorkspace,
     reorderColumn,
+    setSearchEngine,
+    setTheme,
     updateWorkspace,
   } from "./store/core";
   import { loadState, saveState } from "./store/persistence";
-  import type { Block, Column, Link, StargateState, Workspace } from "./store/types";
+  import type { Block, Column, Link, SearchEngine, StargateState, Theme, Workspace } from "./store/types";
 
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded);
@@ -33,9 +35,61 @@
 
   let drag: DragPayload | null = $state(null);
 
+  const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
+  const THEME_LABEL: Record<Theme, string> = {
+    light: "☀️ Light",
+    dark: "🌙 Dark",
+    system: "🌗 System",
+  };
+
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  let prefersDark: boolean = $state(mq.matches);
+
+  $effect(() => {
+    const onChange = (e: MediaQueryListEvent) => {
+      prefersDark = e.matches;
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  });
+
+  const resolvedTheme = $derived(
+    doc.settings.theme === "dark" || (doc.settings.theme === "system" && prefersDark) ? "dark" : "light",
+  );
+
+  $effect(() => {
+    document.body.dataset.resolved = resolvedTheme;
+    document.body.dataset.theme = doc.settings.theme;
+  });
+
   function commit(next: StargateState) {
     doc = next;
     saveState(localStorage, next);
+  }
+
+  function engineUrl(engine: SearchEngine, query: string): string {
+    const q = encodeURIComponent(query);
+    if (engine === "ddg") return `https://duckduckgo.com/?q=${q}`;
+    if (engine === "bing") return `https://www.bing.com/search?q=${q}`;
+    return `https://www.google.com/search?q=${q}`;
+  }
+
+  function onSearch(e: SubmitEvent) {
+    e.preventDefault();
+    const input = (e.currentTarget as HTMLFormElement).querySelector("input");
+    const query = input?.value.trim();
+    if (!query) return;
+    window.open(engineUrl(doc.settings.searchEngine, query), "_blank");
+  }
+
+  function onEngineChange(e: Event) {
+    const value = (e.currentTarget as HTMLSelectElement).value as SearchEngine;
+    commit(setSearchEngine(doc, value));
+  }
+
+  function cycleTheme() {
+    const idx = THEME_CYCLE.indexOf(doc.settings.theme);
+    commit(setTheme(doc, THEME_CYCLE[(idx + 1) % THEME_CYCLE.length]));
   }
 
   function createWorkspace() {
@@ -232,17 +286,17 @@
     <button class="sel">🔖 Links</button>
     <button disabled title="Coming in ticket #15">📋 Kanban</button>
   </div>
-  <button class="pill">🌗 System</button>
+  <button class="pill" onclick={cycleTheme}>{THEME_LABEL[doc.settings.theme]}</button>
   <button class="pill">{"{ } State"}</button>
 </div>
 
 <div class="toolbar">
-  <form class="search" onsubmit={(e) => e.preventDefault()}>
+  <form class="search" onsubmit={onSearch}>
     <input placeholder="Search the web…" aria-label="Search" />
-    <select aria-label="Search engine">
-      <option>Google</option>
-      <option>DuckDuckGo</option>
-      <option>Bing</option>
+    <select aria-label="Search engine" value={doc.settings.searchEngine} onchange={onEngineChange}>
+      <option value="google">Google</option>
+      <option value="ddg">DuckDuckGo</option>
+      <option value="bing">Bing</option>
     </select>
     <button type="submit">Search</button>
   </form>

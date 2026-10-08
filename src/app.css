@@ -10,6 +10,17 @@
   --shadow: 0 1px 2px rgba(38, 43, 36, 0.06), 0 4px 14px rgba(38, 43, 36, 0.07);
 }
 
+body[data-resolved="dark"] {
+  --bg: #171a14;
+  --surface: #22261e;
+  --ink: #eef1e8;
+  --ink-soft: #a6ae9d;
+  --line: #3a4233;
+  --accent: #8fae8f;
+  --accent-ink: #142011;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
 * {
   box-sizing: border-box;
 }
