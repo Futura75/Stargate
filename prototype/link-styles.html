@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stargate — link styles prototype (throwaway)</title>
+<!--
+  PROTOTYPE (throwaway) — wayfinder ticket "Prototype: link styles — detail and tiles".
+  Question: how should the two new per-block link styles (`detail`, `tiles`) look and behave
+  next to the existing `list` style?
+  Three variants of the SAME blocks, switchable via ?variant=A|B|C, the floating bottom bar,
+  or the ← / → keys:
+    A "list (current)"  — favicon 16px + title, one link per row.
+    B "detail"          — favicon + bold title + muted truncated URL second line;
+                          block 1 at 32px (md), block 2 at 48px (lg) so both sizes are visible.
+    C "tiles"           — 48px favicon + centered label beneath, tiles wrap into a grid.
+  Letter tiles stand in for real favicons (offline, same base layer as the app).
+  In-memory only, no persistence on purpose. Throwaway; do not merge.
+-->
+<style>
+  :root {
+    --bg:#eceee7; --surface:#fbfcf9; --ink:#262b24; --ink-soft:#5d6659; --line:#d8ddd0;
+    --accent:#5f7161; --accent-ink:#fbfcf9; --radius:14px;
+    --shadow:0 1px 2px rgba(38,43,36,.06), 0 4px 14px rgba(38,43,36,.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; }
+  button { font: inherit; cursor: pointer; }
+  input { font: inherit; }
+
+  /* decorative topbar so the variants sit against the real app chrome */
+  .topbar { display:flex; align-items:center; gap:8px; padding:10px 18px; flex-wrap:wrap;
+            border-bottom:1px solid var(--line); background:color-mix(in srgb, var(--surface) 78%, transparent); }
+  .tab { border:1px solid var(--line); background:transparent; color:var(--ink-soft); border-radius:999px; padding:5px 14px; font-size:13px; }
+  .tab.active { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .search { margin-left:auto; display:flex; gap:6px; }
+  .search input { border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); padding:6px 10px; font-size:13px; outline:none; }
+
+  .stage { padding: 26px 20px 90px; }
+  .col { width: 380px; }
+
+  .block { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:13px 15px; margin-bottom:18px; }
+  .block h3 { font-size:13.5px; font-weight:700; margin:0 0 9px; }
+  .block-description { margin:-4px 0 9px; font-size:12.5px; line-height:1.4; color:var(--ink-soft); white-space:pre-wrap; }
+
+  .mini-row { display:flex; gap:4px; opacity:0; transition:opacity .12s; }
+  .block:hover .mini-row, .link-row:hover .mini-row, .tile:hover .mini-row { opacity:1; }
+  .mini { border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); border-radius:6px;
+          width:20px; height:20px; font-size:11px; line-height:1; display:inline-flex; align-items:center; justify-content:center; }
+
+  form.inline { display:flex; gap:6px; margin-top:8px; }
+  form.inline input { flex:1; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); padding:6px 9px; font-size:13px; outline:none; }
+  form.inline button { border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); padding:6px 10px; }
+
+  /* favicon / letter tile */
+  .fav { flex:none; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-weight:700; position:relative; overflow:hidden; }
+
+  /* ---- variant A: list ---- */
+  .links { display:flex; flex-direction:column; gap:2px; }
+  .link-row { display:flex; align-items:center; gap:8px; border-radius:8px; padding:3px 4px; }
+  .link-row:hover { background:var(--bg); }
+  .link-row a { flex:1; display:flex; align-items:center; gap:8px; text-decoration:none; color:var(--ink); font-size:14px; min-width:0; }
+  .link-row .title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---- variant B: detail ---- */
+  .detail-row { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:6px; background:var(--surface); }
+  .detail-row a { flex:1; display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); min-width:0; }
+  .detail-row .title { font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .detail-row .url { font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .detail-row .txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+
+  /* ---- variant C: tiles ---- */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:10px 8px; }
+  .tile { position:relative; display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 4px 6px; border-radius:10px; }
+  .tile:hover { background:var(--bg); }
+  .tile .fav { border-radius:10px; }
+  .tile .label { font-size:12px; color:var(--ink-soft); text-align:center; max-width:100%;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tile .mini-row { position:absolute; top:2px; right:2px; }
+
+  /* floating variant switcher */
+  #switcher { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); display:flex; align-items:center; gap:14px;
+              background:#1c201b; color:#f2f4ed; padding:9px 16px; border-radius:999px; box-shadow:0 6px 24px rgba(0,0,0,.35); z-index:50; }
+  #switcher button { background:transparent; border:none; color:#f2f4ed; font-size:16px; padding:0 4px; }
+  #switcher .vlabel { font-size:13px; letter-spacing:.02em; }
+
+  .variant { display:none; }
+  body[data-variant="A"] .variant[data-v="A"] { display:block; }
+  body[data-variant="B"] .variant[data-v="B"] { display:block; }
+  body[data-variant="C"] .variant[data-v="C"] { display:block; }
+</style>
+</head>
+<body data-variant="A">
+  <header class="topbar">
+    <button class="tab active">🔖 Links</button>
+    <button class="tab">📋 Kanban</button>
+    <div class="search"><input placeholder="Search or type a URL…"><button class="tab">⌕</button></div>
+  </header>
+
+  <main class="stage" id="stage"></main>
+
+  <div id="switcher">
+    <button id="prev" title="previous (←)">◀</button>
+    <span class="vlabel" id="vlabel">A · list (current)</span>
+    <button id="next" title="next (→)">▶</button>
+  </div>
+
+<script>
+  const BLOCKS = [
+    { title: "Acquisti", description: "", links: [
+      { title: "Amazon", url: "https://www.amazon.it/" },
+      { title: "eBay", url: "https://www.ebay.it/" },
+      { title: "Subito", url: "https://www.subito.it/" },
+      { title: "Thingiverse", url: "https://www.thingiverse.com/" },
+      { title: "AutoScout24", url: "https://www.autoscout24.it/" },
+      { title: "mobile.de", url: "https://www.mobile.de/" },
+    ]},
+    { title: "Tools", description: "Strumenti interni Remira", links: [
+      { title: "Libemax — Remira Italia Admin", url: "https://remiraitalia.libemax.com/app-timbreature/it/admin_home" },
+      { title: "Jek2Conta", url: "https://kkritprdapp.kyklos.local:9091/" },
+      { title: "Personio", url: "https://remira.personio.de/login/index" },
+      { title: "Vaultwarden — Remira Italia", url: "https://vaultwarden.remira.com/" },
+      { title: "ChatGPT", url: "https://chatgpt.com/" },
+    ]},
+  ];
+
+  function domain(u) { try { return new URL(u).hostname; } catch { return u; } }
+  function hue(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+  function tile(u) { const d = domain(u); return { letter: (d[0] || "?").toUpperCase(), hue: hue(d) }; }
+
+  function fav(u, px) {
+    const t = tile(u);
+    return `<span class="fav" style="width:${px}px;height:${px}px;font-size:${Math.round(px*0.55)}px;background:hsl(${t.hue} 45% 45%)">${t.letter}</span>`;
+  }
+  function mini() { return `<div class="mini-row"><button class="mini" title="settings">⚙</button><button class="mini" title="delete">✕</button></div>`; }
+  function addForm() { return `<form class="inline"><input placeholder="Title https://…"><button>＋</button></form>`; }
+  function bare(u) { return u.replace(/^https?:\/\//, "").replace(/\/+$/, ""); }
+
+  function blockHead(b) {
+    return `<article class="block"><h3>${b.title}</h3>${b.description ? `<p class="block-description">${b.description}</p>` : ""}`;
+  }
+  const closeBlock = `</article>`;
+
+  // ---- A: list (current) ----
+  function variantA() {
+    return BLOCKS.map(b => blockHead(b) +
+      `<div class="links">` +
+      b.links.map(l => `<div class="link-row">${mini()}<a href="${l.url}">${fav(l.url,16)}<span class="title">${l.title}</span></a></div>`).join("") +
+      `</div>` + addForm() + closeBlock).join("");
+  }
+
+  // ---- B: detail (block 1 at 32px, block 2 at 48px) ----
+  function variantB() {
+    return BLOCKS.map((b, i) => {
+      const px = i === 0 ? 32 : 48;
+      return blockHead(b) +
+        b.links.map(l => `<div class="detail-row">${mini()}<a href="${l.url}">${fav(l.url,px)}<span class="txt"><span class="title">${l.title}</span><span class="url">${bare(l.url)}</span></span></a></div>`).join("") +
+        addForm() + closeBlock;
+    }).join("");
+  }
+
+  // ---- C: tiles ----
+  function variantC() {
+    return BLOCKS.map(b => blockHead(b) +
+      `<div class="tiles">` +
+      b.links.map(l => `<div class="tile">${mini()}<a href="${l.url}" style="display:flex;flex-direction:column;align-items:center;gap:6px;text-decoration:none;">${fav(l.url,48)}<span class="label">${l.title}</span></a></div>`).join("") +
+      `</div>` + addForm() + closeBlock).join("");
+  }
+
+  const stage = document.getElementById("stage");
+  stage.innerHTML =
+    `<div class="variant col" data-v="A">${variantA()}</div>` +
+    `<div class="variant col" data-v="B">${variantB()}</div>` +
+    `<div class="variant col" data-v="C">${variantC()}</div>`;
+
+  const LABELS = { A: "A · list (current)", B: "B · detail (32px + 48px)", C: "C · tiles (48px)" };
+  const ORDER = ["A", "B", "C"];
+
+  function apply(v) {
+    document.body.dataset.variant = v;
+    document.getElementById("vlabel").textContent = LABELS[v];
+    history.replaceState(null, "", "?variant=" + v);
+  }
+  function step(dir) {
+    const i = ORDER.indexOf(document.body.dataset.variant);
+    apply(ORDER[(i + dir + ORDER.length) % ORDER.length]);
+  }
+  document.getElementById("prev").onclick = () => step(-1);
+  document.getElementById("next").onclick = () => step(1);
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input, textarea, [contenteditable]")) return;
+    if (e.key === "ArrowLeft") step(-1);
+    if (e.key === "ArrowRight") step(1);
+  });
+  apply(new URLSearchParams(location.search).get("variant") || "A");
+</script>
+</body>
+</html>
