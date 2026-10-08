@@ -3,6 +3,7 @@ export type SearchEngine = "google" | "ddg" | "bing";
 export type FaviconSource = "off" | "google-s2" | "duckduckgo";
 export type FaviconSize = "sm" | "md" | "lg";
 export type BlockTitleSize = "sm" | "md" | "lg";
+export type LinkStyle = "list" | "detail" | "tiles";
 
 export interface Settings {
   theme: Theme;
@@ -33,6 +34,7 @@ export interface Block {
   title: string;
   description?: string;
   faviconSize?: FaviconSize;
+  linkStyle?: LinkStyle;
   links: Link[];
 }
 
@@ -77,7 +79,7 @@ export interface Workspace {
 }
 
 export interface StargateState {
-  schemaVersion: "2";
+  schemaVersion: "3";
   app: { name: string; version: string };
   exportedAt: string;
   settings: Settings;

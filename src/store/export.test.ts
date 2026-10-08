@@ -5,6 +5,7 @@ import {
   importState,
   setBackground,
   setFavicon,
+  updateBlockSettings,
 } from "./core";
 import type { Favicon, StargateState } from "./types";
 
@@ -38,7 +39,7 @@ describe("exportState", () => {
   it("produces the schema envelope with app, exportedAt, settings, and workspaces", () => {
     const s = withAssets();
     const parsed = JSON.parse(exportState(s, "2026-06-06T06:06:06.000Z")) as StargateState;
-    expect(parsed.schemaVersion).toBe("2");
+    expect(parsed.schemaVersion).toBe("3");
     expect(parsed.app).toEqual({ name: "Stargate", version: "0.1.0" });
     expect(parsed.exportedAt).toBe("2026-06-06T06:06:06.000Z");
     expect(parsed.settings).toEqual(s.settings);
@@ -69,6 +70,16 @@ describe("importState", () => {
     expect(importState(exportState(s, "2026-01-01T00:00:00.000Z"))).toEqual(s);
   });
 
+  it("round-trips a chosen link style", () => {
+    let s = seed();
+    const { w, c, b } = ids(s);
+    s = updateBlockSettings(s, w, c, b, { linkStyle: "tiles" });
+
+    const imported = importState(exportState(s, "2026-01-01T00:00:00.000Z"));
+    expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBe("tiles");
+    expect(imported).toEqual(s);
+  });
+
   it("does not mutate the source state object", () => {
     const s = withAssets();
     const before = JSON.stringify(s);
@@ -94,7 +105,7 @@ describe("importState", () => {
   });
 
   it("refuses a newer schemaVersion", () => {
-    expect(() => importState(JSON.stringify({ schemaVersion: "3", settings: {}, workspaces: [] }))).toThrow(
+    expect(() => importState(JSON.stringify({ schemaVersion: "4", settings: {}, workspaces: [] }))).toThrow(
       "made by a newer version of Stargate",
     );
   });

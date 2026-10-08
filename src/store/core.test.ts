@@ -12,9 +12,9 @@ import {
 } from "./core";
 
 describe("createDefaultState", () => {
-  it("returns schemaVersion 2, default settings, and one seeded workspace", () => {
+  it("returns schemaVersion 3, default settings, and one seeded workspace", () => {
     const s = createDefaultState("2026-01-01T00:00:00.000Z");
-    expect(s.schemaVersion).toBe("2");
+    expect(s.schemaVersion).toBe("3");
     expect(s.app).toEqual({ name: "Stargate", version: "0.1.0" });
     expect(s.exportedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(s.settings).toEqual({ theme: "system", searchEngine: "google", faviconSource: "off" });

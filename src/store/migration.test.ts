@@ -19,10 +19,10 @@ function v1File(): any {
   return parsed;
 }
 
-describe("schema v2 migration", () => {
+describe("schema migration", () => {
   it("migrates a v1 file by filling defaults and bumping the schema version", () => {
     const imported = importState(JSON.stringify(v1File()));
-    expect(imported.schemaVersion).toBe("2");
+    expect(imported.schemaVersion).toBe("3");
 
     const ws = imported.workspaces[0];
     expect(ws.layout).toEqual({ columnCount: 0, fluid: true, columnGap: 18 });
@@ -31,10 +31,34 @@ describe("schema v2 migration", () => {
     const block = ws.columns[0].blocks[0];
     expect(block.description).toBe("");
     expect(block.faviconSize).toBe("sm");
+    expect(block.linkStyle).toBe("list");
     expect(block.links[0].title).toBe("Stargate repo");
   });
 
-  it("imports a v2 file with the new settings unchanged", () => {
+  it("migrates a v2 file by filling linkStyle defaults and bumping to v3", () => {
+    const parsed = JSON.parse(exportState(createDefaultState(now()), now()));
+    parsed.schemaVersion = "2";
+    for (const w of parsed.workspaces) {
+      for (const c of w.columns) {
+        for (const b of c.blocks) delete b.linkStyle;
+      }
+    }
+
+    const imported = importState(JSON.stringify(parsed));
+    expect(imported.schemaVersion).toBe("3");
+    expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBe("list");
+  });
+
+  it("drops an unknown linkStyle on import", () => {
+    const raw = JSON.parse(exportState(createDefaultState(now()), now()));
+    raw.schemaVersion = "3";
+    raw.workspaces[0].columns[0].blocks[0].linkStyle = "carousel";
+
+    const imported = importState(JSON.stringify(raw));
+    expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBeUndefined();
+  });
+
+  it("imports a file with the new settings unchanged", () => {
     let s = createDefaultState(now());
     const wsId = s.workspaces[0].id;
     const colId = s.workspaces[0].columns[0].id;
@@ -48,7 +72,7 @@ describe("schema v2 migration", () => {
 
   it("refuses a file from a newer version", () => {
     const newer = v1File();
-    newer.schemaVersion = "3";
+    newer.schemaVersion = "4";
     expect(() => importState(JSON.stringify(newer))).toThrow("made by a newer version of Stargate");
   });
 
