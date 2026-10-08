@@ -116,12 +116,12 @@ describe("block mutations", () => {
 });
 
 describe("link mutations", () => {
-  it("renames a link's title and url", () => {
+  it("renames a link's title", () => {
     const f = fixture();
-    const next = renameLink(f.s, f.ws1, f.colA, f.blkA, f.link2, "Docs", "https://docs.example.com");
+    const next = renameLink(f.s, f.ws1, f.colA, f.blkA, f.link2, "Docs");
     const links = next.workspaces[0].columns[0].blocks[0].links;
     expect(links.map((l) => l.title)).toEqual(["Stargate repo", "Docs", "Second"]);
-    expect(links[1].url).toBe("https://docs.example.com");
+    expect(links[1].url).toBe("https://example.com");
   });
 
   it("deletes a link", () => {
@@ -210,7 +210,7 @@ describe("missing ids are no-ops", () => {
     expect(renameBlock(f.s, f.ws1, "x", f.blkA, "T")).toBe(f.s);
     expect(renameBlock(f.s, f.ws1, f.colA, "x", "T")).toBe(f.s);
     expect(deleteBlock(f.s, f.ws1, f.colA, "x")).toBe(f.s);
-    expect(renameLink(f.s, f.ws1, f.colA, f.blkA, "x", "T", "U")).toBe(f.s);
+    expect(renameLink(f.s, f.ws1, f.colA, f.blkA, "x", "T")).toBe(f.s);
     expect(deleteLink(f.s, f.ws1, f.colA, f.blkA, "x")).toBe(f.s);
     expect(reorderColumn(f.s, f.ws1, "x", 0)).toBe(f.s);
     expect(reorderBlock(f.s, f.ws1, f.colA, "x", 0)).toBe(f.s);

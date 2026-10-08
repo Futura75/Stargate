@@ -362,6 +362,23 @@ export function renameLink(
   blockId: string,
   linkId: string,
   title: string,
+): StargateState {
+  const column = state.workspaces
+    .find((w) => w.id === workspaceId)
+    ?.columns.find((c) => c.id === columnId);
+  const block = column?.blocks.find((b) => b.id === blockId);
+  if (!block) return state;
+  const links = updateById(block.links, linkId, { title });
+  if (links === null) return state;
+  return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
+}
+
+export function setLinkUrl(
+  state: StargateState,
+  workspaceId: string,
+  columnId: string,
+  blockId: string,
+  linkId: string,
   url: string,
 ): StargateState {
   const column = state.workspaces
@@ -369,7 +386,7 @@ export function renameLink(
     ?.columns.find((c) => c.id === columnId);
   const block = column?.blocks.find((b) => b.id === blockId);
   if (!block) return state;
-  const links = updateById(block.links, linkId, { title, url });
+  const links = updateById(block.links, linkId, { url });
   if (links === null) return state;
   return mapBlock(state, workspaceId, columnId, blockId, { links }) ?? state;
 }
