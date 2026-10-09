@@ -51,6 +51,12 @@
     DEFAULT_OPEN_WORKSPACE,
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
+  import {
+    importBookmarksFromTree,
+    parseBookmarksHtml,
+    type BookmarksFolder,
+    type BookmarksTree,
+  } from "./store/bookmarks";
   import { browserCodec } from "./store/codec";
   import { loadState, saveState } from "./store/persistence";
   import type {
@@ -112,6 +118,27 @@
   let linkSettingsLinkId: string | null = $state(null);
   let linkSettingsTitle: string = $state("");
   let linkSettingsUrl: string = $state("");
+  let bookmarksInput: HTMLInputElement | null = null;
+  let bookmarksTree = $state<BookmarksTree | null>(null);
+  let bookmarksFolderIndexes: number[] = $state([]);
+  let bookmarksIncludeRootLinks: boolean = $state(false);
+
+  const bookmarksHasRootLinks = $derived(bookmarksTree?.entries.some((e) => e.type === "link") ?? false);
+  const bookmarksRootLinkCount = $derived(
+    bookmarksTree?.entries.filter((e) => e.type === "link").length ?? 0,
+  );
+  const bookmarksCanConfirm = $derived(
+    bookmarksFolderIndexes.length > 0 || (bookmarksIncludeRootLinks && bookmarksHasRootLinks),
+  );
+
+  $effect(() => {
+    if (!bookmarksTree) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeBookmarksPicker();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
 
   $effect(() => {
     if (!settingsOpen) return;
@@ -446,6 +473,89 @@
       reader.readAsText(file);
     });
     input.click();
+  }
+
+  function onImportBookmarks() {
+    bookmarksInput?.click();
+  }
+
+  function onBookmarksFile(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ""; // allow re-picking the same file after a cancel
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => window.alert("Could not read this file.");
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      let tree: BookmarksTree;
+      try {
+        tree = parseBookmarksHtml(text);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "Could not read this bookmarks file.");
+        return;
+      }
+      if (tree.entries.length === 0) {
+        window.alert("No bookmarks found in this file.");
+        return;
+      }
+      bookmarksTree = tree;
+      bookmarksFolderIndexes = tree.entries.flatMap((entry, i) => (entry.type === "folder" ? [i] : []));
+      bookmarksIncludeRootLinks = false;
+    };
+    reader.readAsText(file);
+  }
+
+  function closeBookmarksPicker() {
+    bookmarksTree = null;
+    bookmarksFolderIndexes = [];
+    bookmarksIncludeRootLinks = false;
+  }
+
+  function toggleBookmarksFolder(index: number) {
+    bookmarksFolderIndexes = bookmarksFolderIndexes.includes(index)
+      ? bookmarksFolderIndexes.filter((i) => i !== index)
+      : [...bookmarksFolderIndexes, index];
+  }
+
+  function confirmBookmarksImport() {
+    const tree = bookmarksTree;
+    if (!tree) return;
+    const includeRootLinks = bookmarksIncludeRootLinks && bookmarksHasRootLinks;
+    if (bookmarksFolderIndexes.length === 0 && !includeRootLinks) return;
+    const known = new Set(doc.workspaces.map((w) => w.id));
+    const next = importBookmarksFromTree(doc, tree, { folders: bookmarksFolderIndexes, includeRootLinks });
+    const created = next.workspaces.filter((w) => !known.has(w.id));
+    closeBookmarksPicker();
+    if (created.length === 0) return; // selection held only empty folders — nothing to import
+    commit(next);
+    activeId = created[0].id;
+  }
+
+  /** Links in a folder and all of its subfolders (the count the picker shows). */
+  function countBookmarkLinks(folder: BookmarksFolder): number {
+    let count = 0;
+    for (const child of folder.children) {
+      count += child.type === "folder" ? countBookmarkLinks(child) : 1;
+    }
+    return count;
+  }
+
+  /** Subfolders of a folder, at any depth (the count the picker shows). */
+  function countBookmarkSubfolders(folder: BookmarksFolder): number {
+    let count = 0;
+    for (const child of folder.children) {
+      if (child.type === "folder") count += 1 + countBookmarkSubfolders(child);
+    }
+    return count;
+  }
+
+  function bookmarksFolderSummary(folder: BookmarksFolder): string {
+    const links = countBookmarkLinks(folder);
+    const subfolders = countBookmarkSubfolders(folder);
+    return `${links} ${links === 1 ? "link" : "links"} · ${subfolders} ${
+      subfolders === 1 ? "subfolder" : "subfolders"
+    }`;
   }
 
   function createWorkspace() {
@@ -1065,6 +1175,17 @@
           {/each}
         </div>
         <div class="popover-divider"></div>
+        <span class="popover-title">Import</span>
+        <button
+          class="popover-option"
+          onclick={() => {
+            settingsOpen = false;
+            onImportBookmarks();
+          }}
+        >
+          📥 Import browser bookmarks (HTML)…
+        </button>
+        <div class="popover-divider"></div>
         <p class="help-note">
           In private/incognito browsing, data is stored temporarily and is not shared between browsers.
         </p>
@@ -1073,6 +1194,13 @@
   </div>
   <button class="pill" onclick={onExport}>⬇ Export</button>
   <button class="pill" onclick={onImport}>⬆ Import</button>
+  <input
+    type="file"
+    accept=".html,.htm"
+    bind:this={bookmarksInput}
+    onchange={onBookmarksFile}
+    hidden
+  />
 </div>
 
 {#if storageError}
@@ -1491,6 +1619,54 @@
       <div class="modal-actions">
         <button type="button" onclick={closeLinkSettings}>Cancel</button>
         <button type="button" class="primary" onclick={saveLinkSettings}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if bookmarksTree}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) closeBookmarksPicker();
+    }}
+  >
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Import browser bookmarks" tabindex="-1">
+      <h2>Import browser bookmarks</h2>
+      <p class="help-note">Choose which folders to import. Each folder becomes a workspace.</p>
+      <div class="bookmarks-picker">
+        {#each bookmarksTree.entries as entry, i (i)}
+          {#if entry.type === "folder"}
+            <label class="bookmarks-option">
+              <input
+                type="checkbox"
+                checked={bookmarksFolderIndexes.includes(i)}
+                onchange={() => toggleBookmarksFolder(i)}
+              />
+              <span class="bookmarks-option-name">{entry.name}</span>
+              <span class="bookmarks-option-meta">{bookmarksFolderSummary(entry)}</span>
+            </label>
+          {/if}
+        {/each}
+        {#if bookmarksHasRootLinks}
+          <label class="bookmarks-option">
+            <input type="checkbox" bind:checked={bookmarksIncludeRootLinks} />
+            <span class="bookmarks-option-name">
+              Include root-level links as a “Segnalibri” workspace
+            </span>
+            <span class="bookmarks-option-meta">
+              {bookmarksRootLinkCount}
+              {bookmarksRootLinkCount === 1 ? "link" : "links"}
+            </span>
+          </label>
+        {/if}
+      </div>
+      <div class="modal-actions">
+        <button type="button" onclick={closeBookmarksPicker}>Cancel</button>
+        <button type="button" class="primary" onclick={confirmBookmarksImport} disabled={!bookmarksCanConfirm}>
+          Import
+        </button>
       </div>
     </div>
   </div>
