@@ -524,6 +524,12 @@
     commit(deleteBlock(doc, active.id, column.id, block.id));
   }
 
+  function onToggleCollapse(column: Column, block: Block) {
+    if (!active) return;
+    const collapsed = block.collapsed ?? false;
+    commit(updateBlockSettings(doc, active.id, column.id, block.id, { collapsed: !collapsed }));
+  }
+
   function openBlockSettings(column: Column, block: Block) {
     settingsColumnId = column.id;
     settingsBlockId = block.id;
@@ -1133,7 +1139,13 @@
 
           {#each column.blocks as block, blockIndex (block.id)}
             {@const linkStyle = linkStyleOf(block)}
-            <article class="block" ondragover={blockDragOver} ondrop={(e) => dropOnBlock(e, column, blockIndex, block)}>
+            {@const collapsed = block.collapsed ?? false}
+            <article
+              class="block"
+              class:block-collapsed={collapsed}
+              ondragover={blockDragOver}
+              ondrop={(e) => dropOnBlock(e, column, blockIndex, block)}
+            >
               <header class="block-head">
                 <h3
                   draggable={true}
@@ -1142,83 +1154,93 @@
                 >
                   {block.title}
                 </h3>
+                <button
+                  class="mini collapse-toggle"
+                  title={collapsed ? "Expand block" : "Collapse block"}
+                  aria-expanded={!collapsed}
+                  onclick={() => onToggleCollapse(column, block)}
+                >
+                  {collapsed ? "▸" : "▾"}
+                </button>
                 <div class="mini-row">
                   <button class="mini" title="Block settings" onclick={() => openBlockSettings(column, block)}>⚙</button>
                   <button class="mini" title="Delete block" onclick={() => onDeleteBlock(column, block)}>✕</button>
                 </div>
               </header>
 
-              {#if block.description}
-                <p class="block-description">{block.description}</p>
-              {/if}
+              {#if !collapsed}
+                {#if block.description}
+                  <p class="block-description">{block.description}</p>
+                {/if}
 
-              <div
-                class={LINK_STYLE_CONTAINER_CLASS[linkStyle]}
-                role="list"
-              >
-                {#each block.links as link, linkIndex (link.id)}
-                  {@const tile = letterTile(domainOf(link.url))}
-                  {@const favicon = link.favicon?.dataUrl}
-                  {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
-                  {@const faviconSize = block.faviconSize ?? "sm"}
-                  {@const faviconPx = linkStyle === "tiles" ? TILE_FAVICON_PX : FAVICON_SIZE_PX[faviconSize]}
-                  <div
-                    class={LINK_STYLE_ROW_CLASS[linkStyle]}
-                    role="listitem"
-                    draggable={true}
-                    ondragstart={(e) =>
-                      startDrag(e, { kind: "link", columnId: column.id, blockId: block.id, linkId: link.id })}
-                    ondragend={endDrag}
-                    ondragover={linkDragOver}
-                    ondrop={(e) => dropOnLink(e, column, block, linkIndex)}
-                  >
-                    <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>
-                      <span
-                        class="favicon"
-                        style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}
-                        style:--favicon-size={`${faviconPx}px`}
-                      >
-                        {#if favicon}
-                          <img class="favicon-img" src={favicon} alt="" width={faviconPx} height={faviconPx} draggable={false} />
-                        {:else}
-                          <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
-                          {#if remote}
-                            <img
-                              class="favicon-img favicon-remote"
-                              loading="lazy"
-                              src={remote}
-                              alt=""
-                              width={faviconPx}
-                              height={faviconPx}
-                              draggable={false}
-                              onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-                            />
+                <div
+                  class={LINK_STYLE_CONTAINER_CLASS[linkStyle]}
+                  role="list"
+                >
+                  {#each block.links as link, linkIndex (link.id)}
+                    {@const tile = letterTile(domainOf(link.url))}
+                    {@const favicon = link.favicon?.dataUrl}
+                    {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
+                    {@const faviconSize = block.faviconSize ?? "sm"}
+                    {@const faviconPx = linkStyle === "tiles" ? TILE_FAVICON_PX : FAVICON_SIZE_PX[faviconSize]}
+                    <div
+                      class={LINK_STYLE_ROW_CLASS[linkStyle]}
+                      role="listitem"
+                      draggable={true}
+                      ondragstart={(e) =>
+                        startDrag(e, { kind: "link", columnId: column.id, blockId: block.id, linkId: link.id })}
+                      ondragend={endDrag}
+                      ondragover={linkDragOver}
+                      ondrop={(e) => dropOnLink(e, column, block, linkIndex)}
+                    >
+                      <a href={link.url} target="_blank" rel="noreferrer" draggable={false}>
+                        <span
+                          class="favicon"
+                          style:background={favicon ? undefined : `hsl(${tile.hue} 45% 45%)`}
+                          style:--favicon-size={`${faviconPx}px`}
+                        >
+                          {#if favicon}
+                            <img class="favicon-img" src={favicon} alt="" width={faviconPx} height={faviconPx} draggable={false} />
+                          {:else}
+                            <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
+                            {#if remote}
+                              <img
+                                class="favicon-img favicon-remote"
+                                loading="lazy"
+                                src={remote}
+                                alt=""
+                                width={faviconPx}
+                                height={faviconPx}
+                                draggable={false}
+                                onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                              />
+                            {/if}
                           {/if}
-                        {/if}
-                      </span>
-                      {#if linkStyle === "detail"}
-                        <span class="txt">
-                          <span class="title">{link.title}</span>
-                          <span class="url">{bareUrl(link.url)}</span>
                         </span>
-                      {:else if linkStyle === "tiles"}
-                        <span class="label">{link.title}</span>
-                      {:else}
-                        <span class="link-title">{link.title}</span>
-                      {/if}
-                    </a>
-                    <div class="mini-row">
-                      <button class="mini" title="Link settings" onclick={() => openLinkSettings(column, block, link)}>⚙</button>
-                      <button class="mini" title="Delete link" onclick={() => onDeleteLink(column, block, link)}>✕</button>
+                        {#if linkStyle === "detail"}
+                          <span class="txt">
+                            <span class="title">{link.title}</span>
+                            <span class="url">{bareUrl(link.url)}</span>
+                          </span>
+                        {:else if linkStyle === "tiles"}
+                          <span class="label">{link.title}</span>
+                        {:else}
+                          <span class="link-title">{link.title}</span>
+                        {/if}
+                      </a>
+                      <div class="mini-row">
+                        <button class="mini" title="Link settings" onclick={() => openLinkSettings(column, block, link)}>⚙</button>
+                        <button class="mini" title="Delete link" onclick={() => onDeleteLink(column, block, link)}>✕</button>
+                      </div>
                     </div>
-                  </div>
-                {/each}
-              </div>
+                  {/each}
+                </div>
 
-              <form class="inline" onsubmit={(e) => addLinkForm(e, column, block)}>
-                <input placeholder="Title https://… (or just a domain)" />
-                <button type="submit">＋</button>
-              </form>
+                <form class="inline" onsubmit={(e) => addLinkForm(e, column, block)}>
+                  <input placeholder="Title https://… (or just a domain)" />
+                  <button type="submit">＋</button>
+                </form>
+              {/if}
             </article>
           {/each}
 
