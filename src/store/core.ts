@@ -501,6 +501,18 @@ export function removeFavicon(
   }) ?? state;
 }
 
+export function moveWorkspace(
+  state: StargateState,
+  workspaceId: string,
+  toIndex: number,
+): StargateState {
+  const fromIndex = state.workspaces.findIndex((w) => w.id === workspaceId);
+  if (fromIndex === -1 || fromIndex === toIndex) return state;
+  const workspaces = moveById(state.workspaces, workspaceId, toIndex);
+  if (workspaces === null) return state;
+  return { ...state, workspaces };
+}
+
 export function reorderColumn(
   state: StargateState,
   workspaceId: string,

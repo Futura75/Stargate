@@ -7,9 +7,11 @@ import {
   createDefaultState,
   deserialize,
   domainOf,
+  moveWorkspace,
   parseLinkInput,
   serialize,
 } from "./core";
+import type { StargateState } from "./types";
 
 describe("createDefaultState", () => {
   it("returns schemaVersion 3, default settings, and one seeded workspace", () => {
@@ -110,6 +112,44 @@ describe("parseLinkInput", () => {
 describe("domainOf", () => {
   it("strips www and returns the hostname", () => {
     expect(domainOf("https://www.github.com/x")).toBe("github.com");
+  });
+});
+
+describe("moveWorkspace", () => {
+  function workspaceFixture(): { s: StargateState; personal: string; work: string; play: string } {
+    let s = createDefaultState("2026-01-01T00:00:00.000Z");
+    s = addWorkspace(s, { name: "Work", icon: "🧪", color: "#2e6da3" });
+    s = addWorkspace(s, { name: "Play", icon: "🎮", color: "#22aa55" });
+    const [personal, work, play] = s.workspaces.map((w) => w.id);
+    return { s, personal, work, play };
+  }
+
+  it("reorders workspaces positionally and returns a new state", () => {
+    const f = workspaceFixture();
+    const next = moveWorkspace(f.s, f.play, 0);
+    expect(next).not.toBe(f.s);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Play", "Personal", "Work"]);
+  });
+
+  it("leaves the other workspaces untouched", () => {
+    const f = workspaceFixture();
+    const next = moveWorkspace(f.s, f.play, 0);
+    expect(next.workspaces.find((w) => w.id === f.personal)).toBe(
+      f.s.workspaces.find((w) => w.id === f.personal),
+    );
+    expect(next.workspaces.find((w) => w.id === f.work)).toBe(
+      f.s.workspaces.find((w) => w.id === f.work),
+    );
+  });
+
+  it("is a same-reference no-op when the target index is unchanged", () => {
+    const f = workspaceFixture();
+    expect(moveWorkspace(f.s, f.work, 1)).toBe(f.s);
+  });
+
+  it("is a same-reference no-op when the workspace id is missing", () => {
+    const f = workspaceFixture();
+    expect(moveWorkspace(f.s, "missing", 0)).toBe(f.s);
   });
 });
 
