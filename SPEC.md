@@ -16,7 +16,7 @@ Stargate is an open-source **browser homepage**: a cozy, simple start page for b
 ### 3.1 Shell & layout — variant D "Synthesis" (#4)
 
 - Cozy card-based dashboard at **full width** (no max-width gutter).
-- **Workspace switcher: tabs on top**, with hover-revealed rename/delete on the active tab and an add-workspace tab at the end.
+- **Workspace switcher: tabs on top**, reorderable by drag-and-drop, with an add-workspace tab at the end; every per-workspace control (Rename, Icon & color, Delete) lives in the ⚙ Settings popover, not on the tab.
 - **Search docked in a toolbar** (no "gate" ring), with an inline engine selector.
 - **Edit affordances are hover-reveal, always available — no global edit mode.**
 - **Theme is global** (light / dark / system cycle pill).
@@ -82,19 +82,28 @@ The style is set with a segmented **Link style** control (List / Detail / Tiles)
 
 **Deferred (not yet specified):** a per-link description field for `detail`'s second line; a workspace-level default style; alphabetical/manual sort within a style.
 
+### 3.8 Workspace UX — settings, ordering, startup, collapse (#34)
+
+- **Workspace settings consolidation**: the active tab carries no `✎ 🎨 ✕` mini-buttons; **Rename workspace**, **Workspace icon & color**, and **Delete workspace** (hidden while only one workspace remains) are options in the ⚙ Settings popover, reusing the prompt/confirm flows.
+- **Workspace ordering**: workspace tabs are drag-and-drop reorderable; order is positional (the `workspaces` array) and therefore survives reloads and export/import.
+- **Startup behavior**: a global setting — **Open first** (default) or **Remember last** — chooses whether the app opens the **first workspace** or the **last active workspace**; the last one is remembered across reloads, with a missing remembered workspace falling back to the first.
+- **Collapsed blocks**: a block can collapse to its title alone — hiding its description, links, and inline add form — while the header controls and drag-and-drop keep working; the collapsed/expanded state is per block, persisted, and carried by export/import.
+
 ## 4. Data model & JSON schema (#6)
 
 Single JSON document; ordering is **positional** (array order is the order); all ids are **opaque random strings**, unique document-wide, never displayed.
 
 ```jsonc
 {
-  "schemaVersion": "3",
+  "schemaVersion": "4",
   "app": { "name": "Stargate", "version": "0.1.0" },
   "exportedAt": "2026-10-08T12:00:00Z",            // ISO 8601
   "settings": {
     "theme": "system",             // "light" | "dark" | "system"
     "searchEngine": "google",      // "google" | "ddg" | "bing"
-    "faviconSource": "off"         // "off" | "google-s2" | "duckduckgo"  (default "off")
+    "faviconSource": "off",        // "off" | "google-s2" | "duckduckgo"  (default "off")
+    "openWorkspace": "first",      // optional: "first" | "last"; absent = "first"
+    "lastWorkspaceId": "opaque-random-string"  // optional; restored when openWorkspace = "last"
   },
   "workspaces": [
     {
@@ -112,6 +121,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
             "description": "optional block description",   // optional
             "faviconSize": "md",                            // optional: "sm" | "md" | "lg"
             "linkStyle": "list",                            // optional: "list" | "detail" | "tiles"; absent = "list"
+            "collapsed": false,                             // optional: true hides description/links/add form; absent = false
             "links": [
             { "id": "l1", "title": "Hacker News", "url": "https://news.ycombinator.com",
               "favicon": { "dataUrl": "data:image/png;base64,…", "source": "custom", "fetchedAt": "2026-10-08T08:00:00Z" } }
@@ -131,7 +141,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 }
 ```
 
-**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64; `linkStyle` ∈ `list|detail|tiles` (absent = `list`, unknown values dropped on import). Schema history: v1 (initial) → v2 (workspace appearance + per-block settings) → v3 (link styles).
+**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64; `linkStyle` ∈ `list|detail|tiles` (absent = `list`, unknown values dropped on import); `openWorkspace` ∈ `first|last` (absent = `first`); `collapsed` boolean (absent = `false`). Schema history: v1 (initial) → v2 (workspace appearance + per-block settings) → v3 (link styles) → v4 (startup behavior + block collapse).
 
 ## 5. Storage & resilience (#3, #7)
 
@@ -146,7 +156,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 
 - Export = **single `.json`** with `schemaVersion`; backgrounds embedded as base64; favicons never remote URLs.
 - Import = **full replace** with explicit confirmation (no merge in v1); invalid/oversized favicons are dropped field-wise (the link survives).
-- Migration: `schemaVersion` **newer** than supported → **refuse** (current data untouched); **older** → run sequential migrations (`1→2` fills workspace appearance and per-block settings; `2→3` fills `linkStyle: "list"`); **equal** → accept.
+- Migration: `schemaVersion` **newer** than supported → **refuse** (current data untouched); **older** → run sequential migrations (`1→2` fills workspace appearance and per-block settings; `2→3` fills `linkStyle: "list"`; `3→4` fills `openWorkspace: "first"` and `collapsed: false`); **equal** → accept.
 
 ## 7. Non-goals for v1 (fog carried forward)
 

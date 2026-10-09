@@ -34,6 +34,10 @@ _Avoid_: Monogram, avatar, placeholder
 A per-block rendering mode for a block's links: `list` (favicon + title in rows), `detail` (favicon + title + URL second line), or `tiles` (large favicon + centered label). Defaults to `list`.
 _Avoid_: View mode, layout, display
 
+**Collapsed block**:
+A block reduced to its header/title alone — its description, links, and inline add form are hidden until it is expanded. The collapsed/expanded state is persisted per block.
+_Avoid_: Folded card, minimized group
+
 ### Kanban
 
 **Kanban board**:
@@ -63,8 +67,12 @@ The global light/dark/system appearance setting.
 _Avoid_: Mode, appearance
 
 **Settings**:
-The global configuration: theme, search engine, and favicon source.
+The global configuration: theme, search engine, favicon source, and startup behavior.
 _Avoid_: Preferences, options, config
+
+**Startup behavior**:
+The setting that decides which workspace opens on load: the first workspace (`first`, default) or the last active one (`last`, remembered from `lastWorkspaceId`).
+_Avoid_: Landing page, default workspace, session restore
 
 ### Export
 
@@ -73,5 +81,5 @@ A single JSON file containing everything: an envelope with `schemaVersion`, app 
 _Avoid_: Backup, snapshot, dump
 
 **schemaVersion**:
-A version string (currently `"3"`) in the export envelope identifying the data format; used to migrate or refuse imports.
+A version string (currently `"4"`) in the export envelope identifying the data format; used to migrate or refuse imports.
 _Avoid_: Version (alone), format version
