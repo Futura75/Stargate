@@ -11,7 +11,12 @@ describe("setSearchEngine", () => {
     const s = state();
     const next = setSearchEngine(s, engine);
     expect(next.settings.searchEngine).toBe(engine);
-    expect(next.settings).toEqual({ theme: "system", searchEngine: engine, faviconSource: "off" });
+    expect(next.settings).toEqual({
+      theme: "system",
+      searchEngine: engine,
+      faviconSource: "off",
+      openWorkspace: "first",
+    });
     expect(s.settings.searchEngine).toBe("google");
     expect(next).not.toBe(s);
     expect(next.settings).not.toBe(s.settings);
@@ -24,7 +29,7 @@ describe("setTheme", () => {
     const s = state();
     const next = setTheme(s, theme);
     expect(next.settings.theme).toBe(theme);
-    expect(next.settings).toEqual({ theme, searchEngine: "google", faviconSource: "off" });
+    expect(next.settings).toEqual({ theme, searchEngine: "google", faviconSource: "off", openWorkspace: "first" });
     expect(s.settings.theme).toBe("system");
     expect(next).not.toBe(s);
     expect(next.settings).not.toBe(s.settings);

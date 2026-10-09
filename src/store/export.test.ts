@@ -40,7 +40,7 @@ describe("exportState", () => {
   it("produces the schema envelope with app, exportedAt, settings, and workspaces", () => {
     const s = withAssets();
     const parsed = JSON.parse(exportState(s, "2026-06-06T06:06:06.000Z")) as StargateState;
-    expect(parsed.schemaVersion).toBe("3");
+    expect(parsed.schemaVersion).toBe("4");
     expect(parsed.app).toEqual({ name: "Stargate", version: "0.1.0" });
     expect(parsed.exportedAt).toBe("2026-06-06T06:06:06.000Z");
     expect(parsed.settings).toEqual(s.settings);
@@ -94,6 +94,19 @@ describe("importState", () => {
     expect(linkStyleOf(block)).toBe("list");
   });
 
+  it("round-trips a chosen startup behavior, remembered workspace, and collapsed flags", () => {
+    const base = seed();
+    const { w, c, b } = ids(base);
+    let s = updateBlockSettings(base, w, c, b, { collapsed: true });
+    s = { ...s, settings: { ...s.settings, openWorkspace: "last", lastWorkspaceId: w } };
+
+    const imported = importState(exportState(s, "2026-01-01T00:00:00.000Z"));
+    expect(imported.settings.openWorkspace).toBe("last");
+    expect(imported.settings.lastWorkspaceId).toBe(w);
+    expect(imported.workspaces[0].columns[0].blocks[0].collapsed).toBe(true);
+    expect(imported).toEqual(s);
+  });
+
   it("does not mutate the source state object", () => {
     const s = withAssets();
     const before = JSON.stringify(s);
@@ -119,7 +132,7 @@ describe("importState", () => {
   });
 
   it("refuses a newer schemaVersion", () => {
-    expect(() => importState(JSON.stringify({ schemaVersion: "4", settings: {}, workspaces: [] }))).toThrow(
+    expect(() => importState(JSON.stringify({ schemaVersion: "5", settings: {}, workspaces: [] }))).toThrow(
       "made by a newer version of Stargate",
     );
   });

@@ -33,7 +33,7 @@ describe("saveState / loadState", () => {
     const storage = fakeStorage({ [STORAGE_KEY]: "{ not valid json" });
     const result = loadState(storage);
     expect(result.recovered).toBe(false);
-    expect(result.state.schemaVersion).toBe("3");
+    expect(result.state.schemaVersion).toBe("4");
     expect(result.state.workspaces).toHaveLength(1);
   });
 
@@ -53,7 +53,7 @@ describe("saveState / loadState", () => {
     const storage = fakeStorage({ [STORAGE_KEY]: JSON.stringify(v1doc) });
     const { state, recovered } = loadState(storage);
     expect(recovered).toBe(false);
-    expect(state.schemaVersion).toBe("3");
+    expect(state.schemaVersion).toBe("4");
     expect(state.workspaces[0].layout).toEqual({ columnCount: 0, fluid: true, columnGap: 18 });
     expect(state.workspaces[0].blockTitleSize).toBe("md");
     expect(state.workspaces[0].columns[0].blocks[0].description).toBe("");
