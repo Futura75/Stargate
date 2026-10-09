@@ -52,11 +52,13 @@
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import {
-    bookmarksFolderCounts,
+    DEFAULT_UNGROUPED_BLOCK_TITLE,
     DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
+    folderPathKey,
     importBookmarksFromTree,
+    listBookmarkFolders,
     parseBookmarksHtml,
-    type BookmarksFolder,
+    type BookmarkFolderRow,
     type BookmarksTree,
   } from "./store/bookmarks";
   import { browserCodec } from "./store/codec";
@@ -122,15 +124,18 @@
   let linkSettingsUrl: string = $state("");
   let bookmarksInput: HTMLInputElement | null = null;
   let bookmarksTree = $state<BookmarksTree | null>(null);
-  let bookmarksFolderIndexes: number[] = $state([]);
+  let bookmarksExcluded: string[] = $state([]);
   let bookmarksIncludeRootLinks: boolean = $state(false);
+  let bookmarksIncludeUngroupedBlock: boolean = $state(true);
 
+  const bookmarksFolders = $derived(bookmarksTree ? listBookmarkFolders(bookmarksTree) : []);
   const bookmarksHasRootLinks = $derived(bookmarksTree?.entries.some((e) => e.type === "link") ?? false);
   const bookmarksRootLinkCount = $derived(
     bookmarksTree?.entries.filter((e) => e.type === "link").length ?? 0,
   );
   const bookmarksCanConfirm = $derived(
-    bookmarksFolderIndexes.length > 0 || (bookmarksIncludeRootLinks && bookmarksHasRootLinks),
+    bookmarksFolders.some((f) => f.depth === 0 && !bookmarksExcluded.includes(folderPathKey(f.path))) ||
+      (bookmarksIncludeRootLinks && bookmarksHasRootLinks),
   );
 
   $effect(() => {
@@ -502,31 +507,50 @@
         return;
       }
       bookmarksTree = tree;
-      bookmarksFolderIndexes = tree.entries.flatMap((entry, i) => (entry.type === "folder" ? [i] : []));
+      bookmarksExcluded = [];
       bookmarksIncludeRootLinks = false;
+      bookmarksIncludeUngroupedBlock = true;
     };
     reader.readAsText(file);
   }
 
   function closeBookmarksPicker() {
     bookmarksTree = null;
-    bookmarksFolderIndexes = [];
+    bookmarksExcluded = [];
     bookmarksIncludeRootLinks = false;
+    bookmarksIncludeUngroupedBlock = true;
   }
 
-  function toggleBookmarksFolder(index: number) {
-    bookmarksFolderIndexes = bookmarksFolderIndexes.includes(index)
-      ? bookmarksFolderIndexes.filter((i) => i !== index)
-      : [...bookmarksFolderIndexes, index];
+  function toggleBookmarksFolder(path: string[]) {
+    const key = folderPathKey(path);
+    bookmarksExcluded = bookmarksExcluded.includes(key)
+      ? bookmarksExcluded.filter((k) => k !== key)
+      : [...bookmarksExcluded, key];
+  }
+
+  /** True when an ancestor is excluded, so this folder's subtree is pruned regardless of its own box. */
+  function bookmarksFolderPruned(path: string[]): boolean {
+    for (let i = 1; i < path.length; i++) {
+      if (bookmarksExcluded.includes(folderPathKey(path.slice(0, i)))) return true;
+    }
+    return false;
+  }
+
+  function bookmarksFolderChecked(path: string[]): boolean {
+    return !bookmarksExcluded.includes(folderPathKey(path)) && !bookmarksFolderPruned(path);
   }
 
   function confirmBookmarksImport() {
     const tree = bookmarksTree;
     if (!tree) return;
     const includeRootLinks = bookmarksIncludeRootLinks && bookmarksHasRootLinks;
-    if (bookmarksFolderIndexes.length === 0 && !includeRootLinks) return;
+    if (!bookmarksCanConfirm) return;
     const known = new Set(doc.workspaces.map((w) => w.id));
-    const next = importBookmarksFromTree(doc, tree, { folders: bookmarksFolderIndexes, includeRootLinks });
+    const next = importBookmarksFromTree(doc, tree, {
+      excludedFolders: bookmarksExcluded,
+      includeRootLinks,
+      includeUngroupedBlock: bookmarksIncludeUngroupedBlock,
+    });
     const created = next.workspaces.filter((w) => !known.has(w.id));
     closeBookmarksPicker();
     if (created.length === 0) return; // selection held only empty folders — nothing to import
@@ -534,10 +558,9 @@
     activeId = created[0].id;
   }
 
-  function bookmarksFolderSummary(folder: BookmarksFolder): string {
-    const { links, subfolders } = bookmarksFolderCounts(folder);
-    return `${links} ${links === 1 ? "link" : "links"} · ${subfolders} ${
-      subfolders === 1 ? "subfolder" : "subfolders"
+  function bookmarksFolderSummary(row: BookmarkFolderRow): string {
+    return `${row.links} ${row.links === 1 ? "link" : "links"} · ${row.subfolders} ${
+      row.subfolders === 1 ? "subfolder" : "subfolders"
     }`;
   }
 
@@ -1615,23 +1638,38 @@
       if (e.target === e.currentTarget) closeBookmarksPicker();
     }}
   >
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Import browser bookmarks" tabindex="-1">
+    <div class="modal bookmarks-modal" role="dialog" aria-modal="true" aria-label="Import browser bookmarks" tabindex="-1">
       <h2>Import browser bookmarks</h2>
-      <p class="help-note">Choose which folders to import. Each folder becomes a workspace.</p>
+      <p class="help-note">
+        Uncheck folders to leave them out. Each top-level folder becomes a workspace; its subfolders
+        become widgets.
+      </p>
       <div class="bookmarks-picker">
-        {#each bookmarksTree.entries as entry, i (i)}
-          {#if entry.type === "folder"}
-            <label class="bookmarks-option">
-              <input
-                type="checkbox"
-                checked={bookmarksFolderIndexes.includes(i)}
-                onchange={() => toggleBookmarksFolder(i)}
-              />
-              <span class="bookmarks-option-name">{entry.name}</span>
-              <span class="bookmarks-option-meta">{bookmarksFolderSummary(entry)}</span>
-            </label>
-          {/if}
+        {#each bookmarksFolders as row (folderPathKey(row.path))}
+          {@const pruned = bookmarksFolderPruned(row.path)}
+          <label
+            class="bookmarks-option"
+            class:pruned
+            style="padding-left: {8 + row.depth * 18}px"
+          >
+            <input
+              type="checkbox"
+              checked={bookmarksFolderChecked(row.path)}
+              disabled={pruned}
+              onchange={() => toggleBookmarksFolder(row.path)}
+            />
+            <span class="bookmarks-option-name">{row.name}</span>
+            <span class="bookmarks-option-meta">{bookmarksFolderSummary(row)}</span>
+          </label>
         {/each}
+        {#if bookmarksFolders.length > 0}
+          <label class="bookmarks-option">
+            <input type="checkbox" bind:checked={bookmarksIncludeUngroupedBlock} />
+            <span class="bookmarks-option-name">
+              Create a “{DEFAULT_UNGROUPED_BLOCK_TITLE}” block for ungrouped links
+            </span>
+          </label>
+        {/if}
         {#if bookmarksHasRootLinks}
           <label class="bookmarks-option">
             <input type="checkbox" bind:checked={bookmarksIncludeRootLinks} />
