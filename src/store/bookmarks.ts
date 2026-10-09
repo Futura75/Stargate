@@ -17,6 +17,28 @@ export interface BookmarksFolder {
 
 export type BookmarksEntry = BookmarksFolder | BookmarksLink;
 
+/**
+ * Links and subfolders a folder holds, counted recursively at any depth. The folder itself is not
+ * counted; only its children and their descendants.
+ */
+export function bookmarksFolderCounts(
+  folder: BookmarksFolder,
+): { links: number; subfolders: number } {
+  let links = 0;
+  let subfolders = 0;
+  for (const child of folder.children) {
+    if (child.type === "folder") {
+      subfolders += 1;
+      const nested = bookmarksFolderCounts(child);
+      links += nested.links;
+      subfolders += nested.subfolders;
+    } else {
+      links += 1;
+    }
+  }
+  return { links, subfolders };
+}
+
 /** Root of a parsed bookmarks file: top-level folders and root-level loose links, in file order. */
 export interface BookmarksTree {
   entries: BookmarksEntry[];

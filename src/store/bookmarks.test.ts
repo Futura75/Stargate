@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bookmarksFolderCounts,
   DEFAULT_BOOKMARKS_COLUMN_TITLE,
   DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
   DEFAULT_UNGROUPED_BLOCK_TITLE,
@@ -307,5 +308,33 @@ describe("importBookmarksFromTree", () => {
     );
     const roundTripped = importState(exportState(next, "2026-02-02T00:00:00.000Z"));
     expect(roundTripped).toEqual({ ...next, exportedAt: "2026-02-02T00:00:00.000Z" });
+  });
+});
+
+describe("bookmarksFolderCounts", () => {
+  it("counts links and subfolders recursively across depth", () => {
+    const subject = folder("Root", [
+      link("A", "https://a.com"),
+      link("B", "https://b.com"),
+      folder("Sub", [
+        link("C", "https://c.com"),
+        folder("Deep", [link("D", "https://d.com")]),
+      ]),
+    ]);
+
+    expect(bookmarksFolderCounts(subject)).toEqual({ links: 4, subfolders: 2 });
+  });
+
+  it("mixes loose links and subfolders without counting the folder itself", () => {
+    const subject = folder("Root", [
+      folder("OnlyChildren", [folder("Leaf", [link("A", "https://a.com")])]),
+      link("Loose", "https://loose.com"),
+    ]);
+
+    expect(bookmarksFolderCounts(subject)).toEqual({ links: 2, subfolders: 2 });
+  });
+
+  it("returns zeros for a folder with no children", () => {
+    expect(bookmarksFolderCounts(folder("Empty"))).toEqual({ links: 0, subfolders: 0 });
   });
 });

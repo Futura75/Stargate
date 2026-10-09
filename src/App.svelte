@@ -52,6 +52,8 @@
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import {
+    bookmarksFolderCounts,
+    DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
     importBookmarksFromTree,
     parseBookmarksHtml,
     type BookmarksFolder,
@@ -532,27 +534,8 @@
     activeId = created[0].id;
   }
 
-  /** Links in a folder and all of its subfolders (the count the picker shows). */
-  function countBookmarkLinks(folder: BookmarksFolder): number {
-    let count = 0;
-    for (const child of folder.children) {
-      count += child.type === "folder" ? countBookmarkLinks(child) : 1;
-    }
-    return count;
-  }
-
-  /** Subfolders of a folder, at any depth (the count the picker shows). */
-  function countBookmarkSubfolders(folder: BookmarksFolder): number {
-    let count = 0;
-    for (const child of folder.children) {
-      if (child.type === "folder") count += 1 + countBookmarkSubfolders(child);
-    }
-    return count;
-  }
-
   function bookmarksFolderSummary(folder: BookmarksFolder): string {
-    const links = countBookmarkLinks(folder);
-    const subfolders = countBookmarkSubfolders(folder);
+    const { links, subfolders } = bookmarksFolderCounts(folder);
     return `${links} ${links === 1 ? "link" : "links"} · ${subfolders} ${
       subfolders === 1 ? "subfolder" : "subfolders"
     }`;
@@ -1653,7 +1636,7 @@
           <label class="bookmarks-option">
             <input type="checkbox" bind:checked={bookmarksIncludeRootLinks} />
             <span class="bookmarks-option-name">
-              Include root-level links as a “Segnalibri” workspace
+              Include root-level links as a “{DEFAULT_BOOKMARKS_WORKSPACE_TITLE}” workspace
             </span>
             <span class="bookmarks-option-meta">
               {bookmarksRootLinkCount}
