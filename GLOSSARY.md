@@ -83,3 +83,9 @@ _Avoid_: Backup, snapshot, dump
 **schemaVersion**:
 A version string (currently `"4"`) in the export envelope identifying the data format; used to migrate or refuse imports.
 _Avoid_: Version (alone), format version
+
+### Import
+
+**Bookmarks import**:
+The one-way, append-only import of a browser's Netscape bookmark HTML export: the user picks which top-level folders to convert, each into a new workspace (subfolders → blocks, links → links, ungrouped links → a "Generali" block). Existing workspaces are never modified and the schema is unchanged.
+_Avoid_: Sync, merge, restore, migration
