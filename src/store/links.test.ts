@@ -185,7 +185,7 @@ describe("move", () => {
   it("moves a link between blocks", () => {
     const f = fixture();
     let s = addLink(f.s, f.ws1, f.colA, f.blkB, "https://news.ycombinator.com HN");
-    const next = moveLink(s, f.ws1, f.colA, f.blkA, f.blkB, f.link2, 1);
+    const next = moveLink(s, f.ws1, f.colA, f.colA, f.blkA, f.blkB, f.link2, 1);
     expect(next.workspaces[0].columns[0].blocks[0].links.map((l) => l.title)).toEqual([
       "Stargate repo",
       "Second",
@@ -194,6 +194,37 @@ describe("move", () => {
       "HN",
       "Example",
     ]);
+  });
+});
+
+describe("moveLink across columns", () => {
+  it("moves a link to a block in another column", () => {
+    const f = fixture();
+    const s = addBlock(f.s, f.ws1, f.colB, "Target");
+    const target = s.workspaces[0].columns[1].blocks[0].id;
+    const next = moveLink(s, f.ws1, f.colA, f.colB, f.blkA, target, f.link3, 0);
+    expect(next.workspaces[0].columns[0].blocks[0].links.map((l) => l.title)).toEqual(["Stargate repo", "Example"]);
+    expect(next.workspaces[0].columns[1].blocks[0].links.map((l) => l.title)).toEqual(["Second"]);
+    expect(next.workspaces[0].columns[1].blocks[0].title).toBe("Target");
+    expect(next.workspaces[0].columns[0].blocks[1]).toBe(s.workspaces[0].columns[0].blocks[1]);
+  });
+
+  it("appends a link at the end of a target block in another column", () => {
+    const f = fixture();
+    let s = addBlock(f.s, f.ws1, f.colB, "Target");
+    const target = s.workspaces[0].columns[1].blocks[0].id;
+    s = addLink(s, f.ws1, f.colB, target, "https://first.com First");
+    const next = moveLink(s, f.ws1, f.colA, f.colB, f.blkA, target, f.link2, 99);
+    expect(next.workspaces[0].columns[1].blocks[0].links.map((l) => l.title)).toEqual(["First", "Example"]);
+  });
+
+  it("leaves other workspaces untouched", () => {
+    const f = fixture();
+    const s = addBlock(f.s, f.ws1, f.colB, "Target");
+    const target = s.workspaces[0].columns[1].blocks[0].id;
+    const next = moveLink(s, f.ws1, f.colA, f.colB, f.blkA, target, f.link1, 0);
+    expect(next.workspaces[1]).toBe(s.workspaces[1]);
+    expect(next.workspaces[0].columns[0].blocks[0].links).toHaveLength(2);
   });
 });
 
@@ -218,9 +249,10 @@ describe("missing ids are no-ops", () => {
     expect(moveBlock(f.s, f.ws1, "x", f.colB, f.blkA, 0)).toBe(f.s);
     expect(moveBlock(f.s, f.ws1, f.colA, "x", f.blkA, 0)).toBe(f.s);
     expect(moveBlock(f.s, f.ws1, f.colA, f.colB, "x", 0)).toBe(f.s);
-    expect(moveLink(f.s, f.ws1, "x", f.blkA, f.blkB, f.link1, 0)).toBe(f.s);
-    expect(moveLink(f.s, f.ws1, f.colA, "x", f.blkB, f.link1, 0)).toBe(f.s);
-    expect(moveLink(f.s, f.ws1, f.colA, f.blkA, "x", f.link1, 0)).toBe(f.s);
-    expect(moveLink(f.s, f.ws1, f.colA, f.blkA, f.blkB, "x", 0)).toBe(f.s);
+    expect(moveLink(f.s, f.ws1, "x", f.colA, f.blkA, f.blkB, f.link1, 0)).toBe(f.s);
+    expect(moveLink(f.s, f.ws1, f.colA, "x", f.blkA, f.blkB, f.link1, 0)).toBe(f.s);
+    expect(moveLink(f.s, f.ws1, f.colA, f.colA, "x", f.blkB, f.link1, 0)).toBe(f.s);
+    expect(moveLink(f.s, f.ws1, f.colA, f.colA, f.blkA, "x", f.link1, 0)).toBe(f.s);
+    expect(moveLink(f.s, f.ws1, f.colA, f.colA, f.blkA, f.blkB, "x", 0)).toBe(f.s);
   });
 });

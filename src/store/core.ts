@@ -616,36 +616,53 @@ export function moveBlock(
 export function moveLink(
   state: StargateState,
   workspaceId: string,
-  columnId: string,
+  fromColumnId: string,
+  toColumnId: string,
   fromBlockId: string,
   toBlockId: string,
   linkId: string,
   toIndex: number,
 ): StargateState {
   const workspace = state.workspaces.find((w) => w.id === workspaceId);
-  const column = workspace?.columns.find((c) => c.id === columnId);
-  if (!column) return state;
-  const fromBlock = column.blocks.find((b) => b.id === fromBlockId);
-  const toBlock = column.blocks.find((b) => b.id === toBlockId);
+  if (!workspace) return state;
+  const fromColumn = workspace.columns.find((c) => c.id === fromColumnId);
+  const toColumn = workspace.columns.find((c) => c.id === toColumnId);
+  if (!fromColumn || !toColumn) return state;
+  const fromBlock = fromColumn.blocks.find((b) => b.id === fromBlockId);
+  const toBlock = toColumn.blocks.find((b) => b.id === toBlockId);
   if (!fromBlock || !toBlock) return state;
   const link = fromBlock.links.find((l) => l.id === linkId);
   if (!link) return state;
 
-  if (fromBlockId === toBlockId) {
+  if (fromColumnId === toColumnId && fromBlockId === toBlockId) {
     const links = moveById(fromBlock.links, linkId, toIndex);
     if (links === null) return state;
-    return mapBlock(state, workspaceId, columnId, fromBlockId, { links }) ?? state;
+    return mapBlock(state, workspaceId, fromColumnId, fromBlockId, { links }) ?? state;
   }
 
   const fromLinks = fromBlock.links.filter((l) => l.id !== linkId);
   const toLinks = toBlock.links.slice();
   toLinks.splice(clampIndex(toIndex, toLinks.length), 0, link);
-  const blocks = column.blocks.map((b) => {
-    if (b.id === fromBlockId) return { ...b, links: fromLinks };
-    if (b.id === toBlockId) return { ...b, links: toLinks };
-    return b;
+
+  if (fromColumnId === toColumnId) {
+    const blocks = fromColumn.blocks.map((b) => {
+      if (b.id === fromBlockId) return { ...b, links: fromLinks };
+      if (b.id === toBlockId) return { ...b, links: toLinks };
+      return b;
+    });
+    return mapColumn(state, workspaceId, fromColumnId, { blocks }) ?? state;
+  }
+
+  const columns = workspace.columns.map((c) => {
+    if (c.id === fromColumnId) {
+      return { ...c, blocks: c.blocks.map((b) => (b.id === fromBlockId ? { ...b, links: fromLinks } : b)) };
+    }
+    if (c.id === toColumnId) {
+      return { ...c, blocks: c.blocks.map((b) => (b.id === toBlockId ? { ...b, links: toLinks } : b)) };
+    }
+    return c;
   });
-  return mapColumn(state, workspaceId, columnId, { blocks }) ?? state;
+  return mapWorkspace(state, workspaceId, { columns }) ?? state;
 }
 
 export function addKanbanColumn(
