@@ -13,6 +13,11 @@ export const DEFAULT_BLOCK_TITLE_SIZE: BlockTitleSize = "md";
 /** Default link style for blocks without an explicit `linkStyle`. */
 export const DEFAULT_LINK_STYLE: LinkStyle = "list";
 
+/** Effective link style of a block: its explicit style, else the default. */
+export function linkStyleOf(block: Pick<Block, "linkStyle">): LinkStyle {
+  return block.linkStyle ?? DEFAULT_LINK_STYLE;
+}
+
 /** Opaque, unique, random id — never displayed. */
 export function newId(): string {
   const g = globalThis.crypto;
@@ -829,7 +834,7 @@ function migrateV1toV2(state: any): any {
 function migrateV2toV3(state: any): any {
   return {
     ...state,
-    schemaVersion: SCHEMA_VERSION,
+    schemaVersion: "3",
     workspaces: (state.workspaces ?? []).map((w: any) => ({
       ...w,
       columns: (w.columns ?? []).map((c: any) => ({

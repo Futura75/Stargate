@@ -3,11 +3,12 @@ import {
   createDefaultState,
   exportState,
   importState,
+  linkStyleOf,
   setBackground,
   setFavicon,
   updateBlockSettings,
 } from "./core";
-import type { Favicon, StargateState } from "./types";
+import type { Favicon, LinkStyle, StargateState } from "./types";
 
 function seed(): StargateState {
   return createDefaultState("2026-01-01T00:00:00.000Z");
@@ -78,6 +79,19 @@ describe("importState", () => {
     const imported = importState(exportState(s, "2026-01-01T00:00:00.000Z"));
     expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBe("tiles");
     expect(imported).toEqual(s);
+  });
+
+  it("degrades an unknown link style to list", () => {
+    const s = seed();
+    const { w, c, b } = ids(s);
+    const dirty = updateBlockSettings(s, w, c, b, {
+      linkStyle: "carousel" as unknown as LinkStyle,
+    });
+
+    const imported = importState(exportState(dirty, "2026-01-01T00:00:00.000Z"));
+    const block = imported.workspaces[0].columns[0].blocks[0];
+    expect(block.linkStyle).toBeUndefined();
+    expect(linkStyleOf(block)).toBe("list");
   });
 
   it("does not mutate the source state object", () => {

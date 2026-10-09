@@ -16,6 +16,7 @@
     exportState,
     importState,
     letterTile,
+    linkStyleOf,
     MAX_BACKGROUND_BASE64,
     moveBlock,
     moveLink,
@@ -157,6 +158,16 @@
     list: "List",
     detail: "Detail",
     tiles: "Tiles",
+  };
+  const LINK_STYLE_CONTAINER_CLASS: Record<LinkStyle, string> = {
+    list: "links",
+    detail: "detail-links",
+    tiles: "tiles",
+  };
+  const LINK_STYLE_ROW_CLASS: Record<LinkStyle, string> = {
+    list: "link-row",
+    detail: "detail-row",
+    tiles: "tile",
   };
 
   /** `tiles` renders a fixed 48px favicon regardless of the block's faviconSize (#33). */
@@ -499,7 +510,7 @@
     settingsTitle = block.title;
     settingsDescription = block.description ?? "";
     settingsFaviconSize = block.faviconSize ?? "sm";
-    settingsLinkStyle = block.linkStyle ?? DEFAULT_LINK_STYLE;
+    settingsLinkStyle = linkStyleOf(block);
   }
 
   function closeBlockSettings() {
@@ -1048,7 +1059,7 @@
           </header>
 
           {#each column.blocks as block, blockIndex (block.id)}
-            {@const linkStyle = block.linkStyle ?? DEFAULT_LINK_STYLE}
+            {@const linkStyle = linkStyleOf(block)}
             <article class="block" ondragover={blockDragOver} ondrop={(e) => dropOnBlock(e, column, blockIndex, block)}>
               <header class="block-head">
                 <h3
@@ -1069,7 +1080,7 @@
               {/if}
 
               <div
-                class={linkStyle === "tiles" ? "tiles" : linkStyle === "detail" ? "detail-links" : "links"}
+                class={LINK_STYLE_CONTAINER_CLASS[linkStyle]}
                 role="list"
               >
                 {#each block.links as link, linkIndex (link.id)}
@@ -1079,7 +1090,7 @@
                   {@const faviconSize = block.faviconSize ?? "sm"}
                   {@const faviconPx = linkStyle === "tiles" ? TILE_FAVICON_PX : FAVICON_SIZE_PX[faviconSize]}
                   <div
-                    class={linkStyle === "tiles" ? "tile" : linkStyle === "detail" ? "detail-row" : "link-row"}
+                    class={LINK_STYLE_ROW_CLASS[linkStyle]}
                     role="listitem"
                     draggable={true}
                     ondragstart={(e) =>
