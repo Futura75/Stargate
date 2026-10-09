@@ -4,9 +4,10 @@ import {
   addColumn,
   addWorkspace,
   createDefaultState,
+  linkStyleOf,
   updateBlockSettings,
 } from "./core";
-import type { FaviconSize, StargateState } from "./types";
+import type { FaviconSize, LinkStyle, StargateState } from "./types";
 
 interface Fixture {
   s: StargateState;
@@ -61,6 +62,16 @@ describe("updateBlockSettings", () => {
     }
   });
 
+  it("sets a link style", () => {
+    const f = fixture();
+    const styles: LinkStyle[] = ["list", "detail", "tiles"];
+    for (const style of styles) {
+      const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { linkStyle: style });
+      expect(blockA(next).linkStyle).toBe(style);
+      expect(blockA(f.s).linkStyle).toBeUndefined();
+    }
+  });
+
   it("sets both description and favicon size in one patch", () => {
     const f = fixture();
     const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, {
@@ -76,6 +87,20 @@ describe("updateBlockSettings", () => {
     const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { description: "Only A" });
     expect(next.workspaces[0].columns[0].blocks[1]).toBe(f.s.workspaces[0].columns[0].blocks[1]);
     expect(next.workspaces[0].columns[0].blocks[1].description).toBeUndefined();
+  });
+
+  it("resolves a block with no linkStyle to list", () => {
+    const f = fixture();
+    expect(linkStyleOf(blockA(f.s))).toBe("list");
+  });
+
+  it("keeps a block's explicit linkStyle", () => {
+    const f = fixture();
+    const styles: LinkStyle[] = ["list", "detail", "tiles"];
+    for (const style of styles) {
+      const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { linkStyle: style });
+      expect(linkStyleOf(blockA(next))).toBe(style);
+    }
   });
 
   it("returns the same state reference when an id is missing", () => {

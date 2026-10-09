@@ -1,6 +1,6 @@
-import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, SearchEngine, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
+import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
-export const SCHEMA_VERSION = "2" as const;
+export const SCHEMA_VERSION = "3" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
 export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
@@ -10,6 +10,13 @@ export const MAX_BACKGROUND_BASE64 = 700 * 1024;
 /** Render-time defaults applied when a workspace omits its appearance settings. */
 export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = { columnCount: 0, fluid: true, columnGap: 18 };
 export const DEFAULT_BLOCK_TITLE_SIZE: BlockTitleSize = "md";
+/** Default link style for blocks without an explicit `linkStyle`. */
+export const DEFAULT_LINK_STYLE: LinkStyle = "list";
+
+/** Effective link style of a block: its explicit style, else the default. */
+export function linkStyleOf(block: Pick<Block, "linkStyle">): LinkStyle {
+  return block.linkStyle ?? DEFAULT_LINK_STYLE;
+}
 
 /** Opaque, unique, random id — never displayed. */
 export function newId(): string {
@@ -355,7 +362,7 @@ export function updateBlockSettings(
   workspaceId: string,
   columnId: string,
   blockId: string,
-  patch: { description?: string; faviconSize?: FaviconSize },
+  patch: { description?: string; faviconSize?: FaviconSize; linkStyle?: LinkStyle },
 ): StargateState {
   const blocks = mapBlock(state, workspaceId, columnId, blockId, patch);
   return blocks ?? state;
@@ -799,13 +806,14 @@ export function importState(json: string): StargateState {
 /** Migration steps keyed by the version they upgrade FROM. */
 const MIGRATIONS: Record<string, (state: any) => any> = {
   "1": migrateV1toV2,
+  "2": migrateV2toV3,
 };
 
 /** v1 → v2: fill the new optional appearance/settings fields with their defaults. */
 function migrateV1toV2(state: any): any {
   return {
     ...state,
-    schemaVersion: SCHEMA_VERSION,
+    schemaVersion: "2",
     workspaces: (state.workspaces ?? []).map((w: any) => ({
       ...w,
       layout: w.layout ?? DEFAULT_WORKSPACE_LAYOUT,
@@ -816,6 +824,24 @@ function migrateV1toV2(state: any): any {
           ...b,
           description: b.description ?? "",
           faviconSize: b.faviconSize ?? "sm",
+        })),
+      })),
+    })),
+  };
+}
+
+/** v2 → v3: fill every block's link style with the default. */
+function migrateV2toV3(state: any): any {
+  return {
+    ...state,
+    schemaVersion: "3",
+    workspaces: (state.workspaces ?? []).map((w: any) => ({
+      ...w,
+      columns: (w.columns ?? []).map((c: any) => ({
+        ...c,
+        blocks: (c.blocks ?? []).map((b: any) => ({
+          ...b,
+          linkStyle: b.linkStyle ?? DEFAULT_LINK_STYLE,
         })),
       })),
     })),
@@ -858,6 +884,7 @@ function isState(x: unknown): x is StargateState {
 
 const FAVICON_SOURCES = new Set(["custom", "direct", "google-s2", "duckduckgo"]);
 const SIZES = new Set(["sm", "md", "lg"]);
+const LINK_STYLES = new Set(["list", "detail", "tiles"]);
 
 function sanitizeState(state: StargateState): StargateState {
   return {
@@ -892,11 +919,16 @@ function sanitizeBlock(b: Block): Block {
   };
   if (typeof b.description !== "string") delete sanitized.description;
   if (!isSize(b.faviconSize)) delete sanitized.faviconSize;
+  if (!isLinkStyle(b.linkStyle)) delete sanitized.linkStyle;
   return sanitized;
 }
 
 function isSize(x: unknown): boolean {
   return typeof x === "string" && SIZES.has(x);
+}
+
+function isLinkStyle(x: unknown): boolean {
+  return typeof x === "string" && LINK_STYLES.has(x);
 }
 
 function finiteNumber(value: unknown, fallback: number): number {
