@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  addWorkspace,
   createDefaultState,
   exportState,
   importState,
   linkStyleOf,
+  moveWorkspace,
   setBackground,
   setFavicon,
   updateBlockSettings,
@@ -104,6 +106,18 @@ describe("importState", () => {
     expect(imported.settings.openWorkspace).toBe("last");
     expect(imported.settings.lastWorkspaceId).toBe(w);
     expect(imported.workspaces[0].columns[0].blocks[0].collapsed).toBe(true);
+    expect(imported).toEqual(s);
+  });
+
+  it("round-trips the reordered workspace order", () => {
+    let s = seed();
+    s = addWorkspace(s, { name: "Work", icon: "🧪", color: "#2e6da3" });
+    s = addWorkspace(s, { name: "Play", icon: "🎮", color: "#22aa55" });
+    const play = s.workspaces[2].id;
+    s = moveWorkspace(s, play, 0);
+
+    const imported = importState(exportState(s, "2026-01-01T00:00:00.000Z"));
+    expect(imported.workspaces.map((w) => w.name)).toEqual(["Play", "Personal", "Work"]);
     expect(imported).toEqual(s);
   });
 

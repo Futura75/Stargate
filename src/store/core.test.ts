@@ -150,9 +150,11 @@ describe("moveWorkspace", () => {
     );
   });
 
-  it("is a same-reference no-op when the target index is unchanged", () => {
+  it("returns a new state when the target index is unchanged", () => {
     const f = workspaceFixture();
-    expect(moveWorkspace(f.s, f.work, 1)).toBe(f.s);
+    const next = moveWorkspace(f.s, f.work, 1);
+    expect(next).not.toBe(f.s);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Work", "Play"]);
   });
 
   it("is a same-reference no-op when the workspace id is missing", () => {

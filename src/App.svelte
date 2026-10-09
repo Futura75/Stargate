@@ -48,6 +48,7 @@
     updateWorkspaceLayout,
     DEFAULT_BLOCK_TITLE_SIZE,
     DEFAULT_LINK_STYLE,
+    DEFAULT_OPEN_WORKSPACE,
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import { browserCodec } from "./store/codec";
@@ -1056,7 +1057,7 @@
           {#each OPEN_WORKSPACE_OPTIONS as mode (mode)}
             <button
               type="button"
-              class:sel={(doc.settings.openWorkspace ?? "first") === mode}
+              class:sel={(doc.settings.openWorkspace ?? DEFAULT_OPEN_WORKSPACE) === mode}
               onclick={() => onOpenWorkspace(mode)}
             >
               {OPEN_WORKSPACE_LABEL[mode]}
