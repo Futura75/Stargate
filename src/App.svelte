@@ -21,6 +21,7 @@
     moveBlock,
     moveLink,
     moveTask,
+    moveWorkspace,
     removeBackground,
     removeFavicon,
     renameBlock,
@@ -75,6 +76,7 @@
   const blockTitleSize = $derived(active?.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE);
 
   type DragPayload =
+    | { kind: "workspace"; workspaceId: string }
     | { kind: "column"; columnId: string }
     | { kind: "block"; columnId: string; blockId: string }
     | { kind: "link"; columnId: string; blockId: string; linkId: string }
@@ -765,6 +767,22 @@
     drag = null;
   }
 
+  function workspaceDragOver(e: DragEvent) {
+    if (!drag || drag.kind !== "workspace") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function dropOnWorkspace(e: DragEvent, workspaceIndex: number) {
+    if (!drag || drag.kind !== "workspace") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const payload = drag;
+    drag = null;
+    commit(moveWorkspace(doc, payload.workspaceId, workspaceIndex));
+  }
+
   function columnDragOver(e: DragEvent) {
     if (!drag) return;
     if (drag.kind !== "column" && drag.kind !== "block") return;
@@ -872,10 +890,18 @@
 {/if}
 
 <div class="topbar">
-  {#each doc.workspaces as ws (ws.id)}
+  {#each doc.workspaces as ws, wsIndex (ws.id)}
     {#if ws.id === active?.id}
       <div class="tab-wrap">
-        <button class="tab active" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
+        <button
+          class="tab active"
+          draggable={true}
+          onclick={() => (activeId = ws.id)}
+          ondragstart={(e) => startDrag(e, { kind: "workspace", workspaceId: ws.id })}
+          ondragend={endDrag}
+          ondragover={workspaceDragOver}
+          ondrop={(e) => dropOnWorkspace(e, wsIndex)}
+        >{ws.icon} {ws.name}</button>
         <div class="mini-row">
           <button class="mini" title="Rename workspace" onclick={() => onRenameWorkspace(ws)}>✎</button>
           <button class="mini" title="Workspace icon & color" onclick={() => onEditWorkspace(ws)}>🎨</button>
@@ -885,7 +911,15 @@
         </div>
       </div>
     {:else}
-      <button class="tab" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
+      <button
+        class="tab"
+        draggable={true}
+        onclick={() => (activeId = ws.id)}
+        ondragstart={(e) => startDrag(e, { kind: "workspace", workspaceId: ws.id })}
+        ondragend={endDrag}
+        ondragover={workspaceDragOver}
+        ondrop={(e) => dropOnWorkspace(e, wsIndex)}
+      >{ws.icon} {ws.name}</button>
     {/if}
   {/each}
   <button class="tab add" onclick={createWorkspace}>＋ Add</button>
