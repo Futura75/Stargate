@@ -876,13 +876,6 @@
     {#if ws.id === active?.id}
       <div class="tab-wrap">
         <button class="tab active" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
-        <div class="mini-row">
-          <button class="mini" title="Rename workspace" onclick={() => onRenameWorkspace(ws)}>✎</button>
-          <button class="mini" title="Workspace icon & color" onclick={() => onEditWorkspace(ws)}>🎨</button>
-          {#if doc.workspaces.length > 1}
-            <button class="mini" title="Delete workspace" onclick={() => onDeleteWorkspace(ws)}>✕</button>
-          {/if}
-        </div>
       </div>
     {:else}
       <button class="tab" onclick={() => (activeId = ws.id)}>{ws.icon} {ws.name}</button>
@@ -984,6 +977,21 @@
             </button>
           {/each}
         </div>
+        <div class="popover-divider"></div>
+        <span class="popover-title">Workspace</span>
+        {#if active}
+          <button class="popover-option" onclick={() => onRenameWorkspace(active)}>
+            ✎ Rename workspace
+          </button>
+          <button class="popover-option" onclick={() => onEditWorkspace(active)}>
+            🎨 Icon &amp; color
+          </button>
+          {#if doc.workspaces.length > 1}
+            <button class="popover-option" onclick={() => onDeleteWorkspace(active)}>
+              🗑 Delete workspace
+            </button>
+          {/if}
+        {/if}
         <div class="popover-divider"></div>
         <p class="help-note">
           In private/incognito browsing, data is stored temporarily and is not shared between browsers.
