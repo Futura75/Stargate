@@ -8,10 +8,15 @@ export interface BookmarksLink {
   url: string;
 }
 
-/** A parsed bookmark folder: its name and its ordered children (folders or links). */
+/**
+ * A parsed bookmark folder: its name, its stable identity within one parse, and its ordered
+ * children (folders or links). `path` is the folder-name path from the tree root, so a folder's
+ * identity does not depend on array positions (used to select/prune subtrees).
+ */
 export interface BookmarksFolder {
   type: "folder";
   name: string;
+  path: string[];
   children: BookmarksEntry[];
 }
 
@@ -44,10 +49,51 @@ export interface BookmarksTree {
   entries: BookmarksEntry[];
 }
 
-/** Which root entries to import: `folders` are indexes into `tree.entries`. */
+/** One folder row of the picker: its identity, indentation depth and recursive counts. */
+export interface BookmarkFolderRow {
+  path: string[];
+  name: string;
+  /** 0 for a top-level folder, 1 for its subfolders, and so on. */
+  depth: number;
+  /** Links held by the folder and its descendants, at any depth. */
+  links: number;
+  /** Subfolders held by the folder and its descendants, at any depth. */
+  subfolders: number;
+}
+
+/** Stable string key for a folder `path`, used to store/compare exclusions across the seam. */
+export function folderPathKey(path: string[]): string {
+  return JSON.stringify(path);
+}
+
+/**
+ * Every folder of the tree, in pre-order (a folder before its subfolders), with indentation depth
+ * and recursive link/subfolder counts. Links never appear: the picker shows links only as counts.
+ */
+export function listBookmarkFolders(tree: BookmarksTree): BookmarkFolderRow[] {
+  const rows: BookmarkFolderRow[] = [];
+  const walk = (folder: BookmarksFolder, depth: number) => {
+    const { links, subfolders } = bookmarksFolderCounts(folder);
+    rows.push({ path: folder.path, name: folder.name, depth, links, subfolders });
+    for (const child of folder.children) {
+      if (child.type === "folder") walk(child, depth + 1);
+    }
+  };
+  for (const entry of tree.entries) {
+    if (entry.type === "folder") walk(entry, 0);
+  }
+  return rows;
+}
+
+/**
+ * Which folders to leave out. Everything is included by default; `excludedFolders` holds the
+ * `folderPathKey` of folders to exclude, and excluding a folder prunes its whole subtree.
+ */
 export interface BookmarksSelection {
-  folders: number[];
+  excludedFolders: string[];
   includeRootLinks?: boolean;
+  /** Whether a folder's own loose links become a `DEFAULT_UNGROUPED_BLOCK_TITLE` block (default on). */
+  includeUngroupedBlock?: boolean;
 }
 
 /** Title of the synthetic block that collects a folder's ungrouped links. */
@@ -82,20 +128,23 @@ export function parseBookmarksHtml(html: string): BookmarksTree {
     throw new Error("not a Netscape bookmarks file: no <DL> list found");
   }
   const root: BookmarksEntry[] = [];
-  parseList(tokens, 0, root);
+  parseList(tokens, 0, root, []);
   return { entries: root };
 }
 
 /**
  * Appends the selected bookmark folders as new workspaces to `state`, returning a new state and
- * leaving the input untouched. `selection.folders` holds indexes into `tree.entries` (only folder
- * entries are used; anything else is ignored); `selection.includeRootLinks` also imports the
- * root-level loose links as a single `DEFAULT_BOOKMARKS_WORKSPACE_TITLE` workspace.
+ * leaving the input untouched. Everything is included by default: each top-level folder becomes a
+ * workspace unless it is listed in `selection.excludedFolders` (as a `folderPathKey`); excluding a
+ * folder prunes its whole subtree. `selection.includeRootLinks` also imports the root-level loose
+ * links as a single `DEFAULT_BOOKMARKS_WORKSPACE_TITLE` workspace.
  *
- * Mapping per selected folder: the folder becomes a workspace (one `"Links"` column); first-level
- * subfolders become blocks; their links (and everything nested deeper, flattened) become links; the
- * folder's own loose links land in a `DEFAULT_UNGROUPED_BLOCK_TITLE` block. Empty blocks/workspaces
- * are skipped, duplicate names get `" (2)"`/`" (3)"`… suffixes, and the order follows the file.
+ * Mapping per included folder: the folder becomes a workspace (one `"Links"` column); its included
+ * first-level subfolders become blocks (excluded subfolders are pruned); their links (and everything
+ * nested deeper, flattened) become links; the folder's own loose links land in a
+ * `DEFAULT_UNGROUPED_BLOCK_TITLE` block only when `selection.includeUngroupedBlock` is not `false`.
+ * Empty blocks/workspaces are skipped, duplicate names get `" (2)"`/`" (3)"` suffixes, and the order
+ * follows the file. No workspace is ever created from a nested folder.
  */
 export function importBookmarksFromTree(
   state: StargateState,
@@ -105,11 +154,12 @@ export function importBookmarksFromTree(
   const usedNames = new Set(state.workspaces.map((w) => w.name));
   const newWorkspaces: Workspace[] = [];
 
-  const selected = new Set(selection.folders);
-  for (let i = 0; i < tree.entries.length; i++) {
-    const entry = tree.entries[i];
-    if (entry.type !== "folder" || !selected.has(i)) continue;
-    const workspace = folderToWorkspace(entry, usedNames);
+  const excluded = new Set(selection.excludedFolders);
+  const includeUngroupedBlock = selection.includeUngroupedBlock ?? true;
+
+  for (const entry of tree.entries) {
+    if (entry.type !== "folder" || excluded.has(folderPathKey(entry.path))) continue;
+    const workspace = folderToWorkspace(entry, usedNames, excluded, includeUngroupedBlock);
     if (workspace) newWorkspaces.push(workspace);
   }
 
@@ -123,19 +173,27 @@ export function importBookmarksFromTree(
   return { ...state, workspaces: [...state.workspaces, ...newWorkspaces] };
 }
 
-/** Builds one workspace from a selected folder, or `null` when it has no links to import. */
-function folderToWorkspace(folder: BookmarksFolder, usedNames: Set<string>): Workspace | null {
+/** Builds one workspace from an included folder, or `null` when it has no links to import. */
+function folderToWorkspace(
+  folder: BookmarksFolder,
+  usedNames: Set<string>,
+  excluded: Set<string>,
+  includeUngroupedBlock: boolean,
+): Workspace | null {
   const blocks: Block[] = [];
   const looseLinks: Link[] = [];
   for (const child of folder.children) {
     if (child.type === "folder") {
-      const links = collectLinks(child);
+      if (excluded.has(folderPathKey(child.path))) continue;
+      const links = collectLinks(child, excluded);
       if (links.length > 0) blocks.push(makeBlock(child.name, links));
     } else {
       looseLinks.push(toLink(child));
     }
   }
-  if (looseLinks.length > 0) blocks.push(makeBlock(DEFAULT_UNGROUPED_BLOCK_TITLE, looseLinks));
+  if (includeUngroupedBlock && looseLinks.length > 0) {
+    blocks.push(makeBlock(DEFAULT_UNGROUPED_BLOCK_TITLE, looseLinks));
+  }
   if (blocks.length === 0) return null;
 
   return decorate(
@@ -172,11 +230,15 @@ function decorate(workspace: Workspace, blocks: Block[]): Workspace {
 }
 
 /** Depth-first links of a folder, flattening any nesting deeper than the first level. */
-function collectLinks(folder: BookmarksFolder): Link[] {
+function collectLinks(folder: BookmarksFolder, excluded: Set<string>): Link[] {
   const links: Link[] = [];
   for (const child of folder.children) {
-    if (child.type === "folder") links.push(...collectLinks(child));
-    else links.push(toLink(child));
+    if (child.type === "folder") {
+      if (excluded.has(folderPathKey(child.path))) continue;
+      links.push(...collectLinks(child, excluded));
+    } else {
+      links.push(toLink(child));
+    }
   }
   return links;
 }
@@ -294,7 +356,7 @@ function assertBalancedLists(tokens: Token[]): number {
  * root list). A folder entry claims the `<DL>` that immediately follows it as its children; an
  * unattached `<DL>` (e.g. the root list) is merged into the current list.
  */
-function parseList(tokens: Token[], start: number, out: BookmarksEntry[]): number {
+function parseList(tokens: Token[], start: number, out: BookmarksEntry[], parentPath: string[]): number {
   let pendingFolder: BookmarksFolder | null = null;
   let i = start;
   while (i < tokens.length) {
@@ -302,7 +364,7 @@ function parseList(tokens: Token[], start: number, out: BookmarksEntry[]): numbe
     if (t.kind === "close" && t.tag === "dl") return i + 1;
     if (t.kind === "open" && t.tag === "dl") {
       const children: BookmarksEntry[] = [];
-      i = parseList(tokens, i + 1, children);
+      i = parseList(tokens, i + 1, children, pendingFolder ? pendingFolder.path : parentPath);
       if (pendingFolder) {
         pendingFolder.children = children;
         pendingFolder = null;
@@ -312,7 +374,7 @@ function parseList(tokens: Token[], start: number, out: BookmarksEntry[]): numbe
       continue;
     }
     if (t.kind === "open" && t.tag === "dt") {
-      const entry = parseEntryAfterDt(tokens, i + 1);
+      const entry = parseEntryAfterDt(tokens, i + 1, parentPath);
       if (entry) {
         out.push(entry.node);
         pendingFolder = entry.node.type === "folder" ? entry.node : null;
@@ -332,7 +394,7 @@ function parseList(tokens: Token[], start: number, out: BookmarksEntry[]): numbe
  * Reads the entry a `<DT>` introduces. Returns `null` (without consuming anything) when no `<H3>`
  * or `<A>` follows — e.g. a stray `<DT>` or the start of the next list.
  */
-function parseEntryAfterDt(tokens: Token[], start: number): { node: BookmarksEntry; next: number } | null {
+function parseEntryAfterDt(tokens: Token[], start: number, parentPath: string[]): { node: BookmarksEntry; next: number } | null {
   let i = start;
   while (i < tokens.length) {
     const t = tokens[i];
@@ -348,7 +410,8 @@ function parseEntryAfterDt(tokens: Token[], start: number): { node: BookmarksEnt
     if (t.tag === "dt" || t.tag === "dl") return null;
     if (t.tag === "h3") {
       const { text, next } = readElementText(tokens, i, "h3");
-      return { node: { type: "folder", name: decodeEntities(text).trim(), children: [] }, next };
+      const name = decodeEntities(text).trim();
+      return { node: { type: "folder", name, path: [...parentPath, name], children: [] }, next };
     }
     if (t.tag === "a") {
       const { text, next } = readElementText(tokens, i, "a");

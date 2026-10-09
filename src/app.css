@@ -1143,21 +1143,32 @@ body[data-resolved="dark"] .notice.error {
 
 /* ticket #43: browser bookmarks import — folder picker */
 
+/* Wider dialog so the full folder tree (with indentation) stays readable. */
+.modal.bookmarks-modal {
+  width: min(92vw, 720px);
+  max-width: min(92vw, 720px);
+}
+
 .bookmarks-picker {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 300px;
+  max-height: 60vh;
   overflow-y: auto;
+  padding: 4px 2px;
 }
 
 .bookmarks-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border-radius: 8px;
   font-size: 13px;
+}
+
+.bookmarks-option.pruned {
+  opacity: 0.45;
 }
 
 .bookmarks-option:hover {
