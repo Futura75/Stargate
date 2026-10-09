@@ -21,8 +21,11 @@ function v1File(): any {
 
 describe("schema migration", () => {
   it("migrates a v1 file by filling defaults and bumping the schema version", () => {
-    const imported = importState(JSON.stringify(v1File()));
-    expect(imported.schemaVersion).toBe("3");
+    const file = v1File();
+    delete file.settings.openWorkspace;
+    const imported = importState(JSON.stringify(file));
+    expect(imported.schemaVersion).toBe("4");
+    expect(imported.settings.openWorkspace).toBe("first");
 
     const ws = imported.workspaces[0];
     expect(ws.layout).toEqual({ columnCount: 0, fluid: true, columnGap: 18 });
@@ -32,10 +35,22 @@ describe("schema migration", () => {
     expect(block.description).toBe("");
     expect(block.faviconSize).toBe("sm");
     expect(block.linkStyle).toBe("list");
+    expect(block.collapsed).toBe(false);
     expect(block.links[0].title).toBe("Stargate repo");
   });
 
-  it("migrates a v2 file by filling linkStyle defaults and bumping to v3", () => {
+  it("migrates a v3 file to v4 with startup and collapse defaults", () => {
+    const raw = JSON.parse(exportState(createDefaultState(now()), now()));
+    raw.schemaVersion = "3";
+    delete raw.settings.openWorkspace;
+
+    const imported = importState(JSON.stringify(raw));
+    expect(imported.schemaVersion).toBe("4");
+    expect(imported.settings.openWorkspace).toBe("first");
+    expect(imported.workspaces[0].columns[0].blocks[0].collapsed).toBe(false);
+  });
+
+  it("migrates a v2 file by filling linkStyle defaults and bumping to v4", () => {
     const parsed = JSON.parse(exportState(createDefaultState(now()), now()));
     parsed.schemaVersion = "2";
     for (const w of parsed.workspaces) {
@@ -45,7 +60,7 @@ describe("schema migration", () => {
     }
 
     const imported = importState(JSON.stringify(parsed));
-    expect(imported.schemaVersion).toBe("3");
+    expect(imported.schemaVersion).toBe("4");
     expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBe("list");
   });
 
@@ -56,6 +71,19 @@ describe("schema migration", () => {
 
     const imported = importState(JSON.stringify(raw));
     expect(imported.workspaces[0].columns[0].blocks[0].linkStyle).toBeUndefined();
+  });
+
+  it("drops an unknown openWorkspace, non-string lastWorkspaceId, and non-boolean collapsed on import", () => {
+    const raw = JSON.parse(exportState(createDefaultState(now()), now()));
+    raw.schemaVersion = "4";
+    raw.settings.openWorkspace = "somewhere";
+    raw.settings.lastWorkspaceId = 42;
+    raw.workspaces[0].columns[0].blocks[0].collapsed = "yes";
+
+    const imported = importState(JSON.stringify(raw));
+    expect(imported.settings.openWorkspace).toBeUndefined();
+    expect(imported.settings.lastWorkspaceId).toBeUndefined();
+    expect(imported.workspaces[0].columns[0].blocks[0].collapsed).toBeUndefined();
   });
 
   it("imports a file with the new settings unchanged", () => {
@@ -72,7 +100,7 @@ describe("schema migration", () => {
 
   it("refuses a file from a newer version", () => {
     const newer = v1File();
-    newer.schemaVersion = "4";
+    newer.schemaVersion = "5";
     expect(() => importState(JSON.stringify(newer))).toThrow("made by a newer version of Stargate");
   });
 

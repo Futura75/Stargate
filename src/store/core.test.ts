@@ -7,17 +7,27 @@ import {
   createDefaultState,
   deserialize,
   domainOf,
+  moveWorkspace,
   parseLinkInput,
+  resolveActiveWorkspace,
   serialize,
+  setLastWorkspaceId,
+  setOpenWorkspace,
 } from "./core";
+import type { StargateState } from "./types";
 
 describe("createDefaultState", () => {
-  it("returns schemaVersion 3, default settings, and one seeded workspace", () => {
+  it("returns schemaVersion 4, default settings, and one seeded workspace", () => {
     const s = createDefaultState("2026-01-01T00:00:00.000Z");
-    expect(s.schemaVersion).toBe("3");
+    expect(s.schemaVersion).toBe("4");
     expect(s.app).toEqual({ name: "Stargate", version: "0.1.0" });
     expect(s.exportedAt).toBe("2026-01-01T00:00:00.000Z");
-    expect(s.settings).toEqual({ theme: "system", searchEngine: "google", faviconSource: "off" });
+    expect(s.settings).toEqual({
+      theme: "system",
+      searchEngine: "google",
+      faviconSource: "off",
+      openWorkspace: "first",
+    });
     expect(s.workspaces).toHaveLength(1);
 
     const w = s.workspaces[0];
@@ -110,6 +120,78 @@ describe("parseLinkInput", () => {
 describe("domainOf", () => {
   it("strips www and returns the hostname", () => {
     expect(domainOf("https://www.github.com/x")).toBe("github.com");
+  });
+});
+
+describe("moveWorkspace", () => {
+  function workspaceFixture(): { s: StargateState; personal: string; work: string; play: string } {
+    let s = createDefaultState("2026-01-01T00:00:00.000Z");
+    s = addWorkspace(s, { name: "Work", icon: "🧪", color: "#2e6da3" });
+    s = addWorkspace(s, { name: "Play", icon: "🎮", color: "#22aa55" });
+    const [personal, work, play] = s.workspaces.map((w) => w.id);
+    return { s, personal, work, play };
+  }
+
+  it("reorders workspaces positionally and returns a new state", () => {
+    const f = workspaceFixture();
+    const next = moveWorkspace(f.s, f.play, 0);
+    expect(next).not.toBe(f.s);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Play", "Personal", "Work"]);
+  });
+
+  it("leaves the other workspaces untouched", () => {
+    const f = workspaceFixture();
+    const next = moveWorkspace(f.s, f.play, 0);
+    expect(next.workspaces.find((w) => w.id === f.personal)).toBe(
+      f.s.workspaces.find((w) => w.id === f.personal),
+    );
+    expect(next.workspaces.find((w) => w.id === f.work)).toBe(
+      f.s.workspaces.find((w) => w.id === f.work),
+    );
+  });
+
+  it("returns a new state when the target index is unchanged", () => {
+    const f = workspaceFixture();
+    const next = moveWorkspace(f.s, f.work, 1);
+    expect(next).not.toBe(f.s);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Work", "Play"]);
+  });
+
+  it("is a same-reference no-op when the workspace id is missing", () => {
+    const f = workspaceFixture();
+    expect(moveWorkspace(f.s, "missing", 0)).toBe(f.s);
+  });
+});
+
+describe("resolveActiveWorkspace", () => {
+  function workspaceFixture(): { s: StargateState; personal: string; work: string } {
+    let s = createDefaultState("2026-01-01T00:00:00.000Z");
+    s = addWorkspace(s, { name: "Work", icon: "🧪", color: "#2e6da3" });
+    const [personal, work] = s.workspaces.map((w) => w.id);
+    return { s, personal, work };
+  }
+
+  it("returns the first workspace by default", () => {
+    const f = workspaceFixture();
+    expect(resolveActiveWorkspace(f.s)).toBe(f.s.workspaces[0]);
+  });
+
+  it("returns the remembered workspace when openWorkspace is last and the id still exists", () => {
+    const f = workspaceFixture();
+    const s = setLastWorkspaceId(setOpenWorkspace(f.s, "last"), f.work);
+    expect(resolveActiveWorkspace(s)).toBe(s.workspaces[1]);
+  });
+
+  it("falls back to the first workspace when the remembered id is missing", () => {
+    const f = workspaceFixture();
+    const s = setLastWorkspaceId(setOpenWorkspace(f.s, "last"), "missing");
+    expect(resolveActiveWorkspace(s)).toBe(f.s.workspaces[0]);
+  });
+
+  it("returns undefined for an empty workspace list", () => {
+    const s = { ...createDefaultState(), workspaces: [] };
+    expect(resolveActiveWorkspace(s)).toBeUndefined();
+    expect(resolveActiveWorkspace(setOpenWorkspace(s, "last"))).toBeUndefined();
   });
 });
 
