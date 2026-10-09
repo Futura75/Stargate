@@ -9,7 +9,10 @@ import {
   domainOf,
   moveWorkspace,
   parseLinkInput,
+  resolveActiveWorkspace,
   serialize,
+  setLastWorkspaceId,
+  setOpenWorkspace,
 } from "./core";
 import type { StargateState } from "./types";
 
@@ -155,6 +158,38 @@ describe("moveWorkspace", () => {
   it("is a same-reference no-op when the workspace id is missing", () => {
     const f = workspaceFixture();
     expect(moveWorkspace(f.s, "missing", 0)).toBe(f.s);
+  });
+});
+
+describe("resolveActiveWorkspace", () => {
+  function workspaceFixture(): { s: StargateState; personal: string; work: string } {
+    let s = createDefaultState("2026-01-01T00:00:00.000Z");
+    s = addWorkspace(s, { name: "Work", icon: "🧪", color: "#2e6da3" });
+    const [personal, work] = s.workspaces.map((w) => w.id);
+    return { s, personal, work };
+  }
+
+  it("returns the first workspace by default", () => {
+    const f = workspaceFixture();
+    expect(resolveActiveWorkspace(f.s)).toBe(f.s.workspaces[0]);
+  });
+
+  it("returns the remembered workspace when openWorkspace is last and the id still exists", () => {
+    const f = workspaceFixture();
+    const s = setLastWorkspaceId(setOpenWorkspace(f.s, "last"), f.work);
+    expect(resolveActiveWorkspace(s)).toBe(s.workspaces[1]);
+  });
+
+  it("falls back to the first workspace when the remembered id is missing", () => {
+    const f = workspaceFixture();
+    const s = setLastWorkspaceId(setOpenWorkspace(f.s, "last"), "missing");
+    expect(resolveActiveWorkspace(s)).toBe(f.s.workspaces[0]);
+  });
+
+  it("returns undefined for an empty workspace list", () => {
+    const s = { ...createDefaultState(), workspaces: [] };
+    expect(resolveActiveWorkspace(s)).toBeUndefined();
+    expect(resolveActiveWorkspace(setOpenWorkspace(s, "last"))).toBeUndefined();
   });
 });
 

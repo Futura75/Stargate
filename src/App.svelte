@@ -31,11 +31,14 @@
     renameWorkspace,
     reorderColumn,
     reorderKanbanColumn,
+    resolveActiveWorkspace,
     setBackground,
     setBackgroundAlpha,
     setFavicon,
     setFaviconSource,
+    setLastWorkspaceId,
     setLinkUrl,
+    setOpenWorkspace,
     setSearchEngine,
     setTheme,
     updateBlockSettings,
@@ -68,7 +71,7 @@
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded.state);
   let recovered: boolean = $state(loaded.recovered);
-  let activeId: string = $state(loaded.state.workspaces[0]?.id ?? "");
+  let activeId: string = $state(resolveActiveWorkspace(loaded.state)?.id ?? "");
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
 
@@ -185,6 +188,12 @@
     sm: 12,
     md: 13.5,
     lg: 16,
+  };
+
+  const OPEN_WORKSPACE_OPTIONS = ["first", "last"] as const;
+  const OPEN_WORKSPACE_LABEL: Record<(typeof OPEN_WORKSPACE_OPTIONS)[number], string> = {
+    first: "Open first",
+    last: "Remember last",
   };
 
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -373,6 +382,15 @@
     commit(updateBlockTitleSize(doc, wsId, size));
   }
 
+  function onOpenWorkspace(mode: (typeof OPEN_WORKSPACE_OPTIONS)[number]) {
+    commit(setOpenWorkspace(doc, mode));
+  }
+
+  function selectWorkspace(id: string) {
+    activeId = id;
+    commit(setLastWorkspaceId(doc, id));
+  }
+
   function onSearch(e: SubmitEvent) {
     e.preventDefault();
     const input = (e.currentTarget as HTMLFormElement).querySelector("input");
@@ -421,7 +439,7 @@
           return;
         }
         if (!confirm("Replace your current data with this file?")) return;
-        activeId = imported.workspaces[0]?.id ?? "";
+        activeId = resolveActiveWorkspace(imported)?.id ?? "";
         commit(imported);
       };
       reader.readAsText(file);
@@ -896,7 +914,7 @@
         <button
           class="tab active"
           draggable={true}
-          onclick={() => (activeId = ws.id)}
+          onclick={() => selectWorkspace(ws.id)}
           ondragstart={(e) => startDrag(e, { kind: "workspace", workspaceId: ws.id })}
           ondragend={endDrag}
           ondragover={workspaceDragOver}
@@ -907,7 +925,7 @@
       <button
         class="tab"
         draggable={true}
-        onclick={() => (activeId = ws.id)}
+        onclick={() => selectWorkspace(ws.id)}
         ondragstart={(e) => startDrag(e, { kind: "workspace", workspaceId: ws.id })}
         ondragend={endDrag}
         ondragover={workspaceDragOver}
@@ -1026,6 +1044,19 @@
             </button>
           {/if}
         {/if}
+        <div class="popover-divider"></div>
+        <span class="popover-title">Startup</span>
+        <div class="seg">
+          {#each OPEN_WORKSPACE_OPTIONS as mode (mode)}
+            <button
+              type="button"
+              class:sel={(doc.settings.openWorkspace ?? "first") === mode}
+              onclick={() => onOpenWorkspace(mode)}
+            >
+              {OPEN_WORKSPACE_LABEL[mode]}
+            </button>
+          {/each}
+        </div>
         <div class="popover-divider"></div>
         <p class="help-note">
           In private/incognito browsing, data is stored temporarily and is not shared between browsers.
