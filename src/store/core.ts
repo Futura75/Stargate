@@ -113,6 +113,26 @@ export function setFaviconSource(state: StargateState, source: FaviconSource): S
   return { ...state, settings: { ...state.settings, faviconSource: source } };
 }
 
+export function setOpenWorkspace(state: StargateState, mode: NonNullable<Settings["openWorkspace"]>): StargateState {
+  return { ...state, settings: { ...state.settings, openWorkspace: mode } };
+}
+
+export function setLastWorkspaceId(state: StargateState, workspaceId: string | undefined): StargateState {
+  return { ...state, settings: { ...state.settings, lastWorkspaceId: workspaceId } };
+}
+
+/**
+ * Picks the workspace to open on load: the remembered one when startup behavior is
+ * "last" and that id still exists, otherwise the first workspace.
+ */
+export function resolveActiveWorkspace(state: StargateState): Workspace | undefined {
+  if (state.settings.openWorkspace === "last" && state.settings.lastWorkspaceId) {
+    const remembered = state.workspaces.find((w) => w.id === state.settings.lastWorkspaceId);
+    if (remembered) return remembered;
+  }
+  return state.workspaces[0];
+}
+
 export function addColumn(state: StargateState, workspaceId: string, title: string): StargateState {
   return {
     ...state,
