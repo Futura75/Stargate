@@ -42,6 +42,7 @@
     updateWorkspace,
     updateWorkspaceLayout,
     DEFAULT_BLOCK_TITLE_SIZE,
+    DEFAULT_LINK_STYLE,
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import { browserCodec } from "./store/codec";
@@ -54,6 +55,7 @@
     FaviconSource,
     KanbanColumn,
     Link,
+    LinkStyle,
     SearchEngine,
     StargateState,
     Task,
@@ -96,6 +98,7 @@
   let settingsBlockId: string | null = $state(null);
   let settingsDescription: string = $state("");
   let settingsFaviconSize: FaviconSize = $state("sm");
+  let settingsLinkStyle: LinkStyle = $state(DEFAULT_LINK_STYLE);
   let settingsTitle: string = $state("");
   let linkSettingsColumnId: string | null = $state(null);
   let linkSettingsBlockId: string | null = $state(null);
@@ -147,6 +150,13 @@
     sm: 16,
     md: 24,
     lg: 32,
+  };
+
+  const LINK_STYLE_OPTIONS: LinkStyle[] = ["list", "detail", "tiles"];
+  const LINK_STYLE_LABEL: Record<LinkStyle, string> = {
+    list: "List",
+    detail: "Detail",
+    tiles: "Tiles",
   };
 
   const BLOCK_TITLE_SIZE_OPTIONS: BlockTitleSize[] = ["sm", "md", "lg"];
@@ -481,6 +491,7 @@
     settingsTitle = block.title;
     settingsDescription = block.description ?? "";
     settingsFaviconSize = block.faviconSize ?? "sm";
+    settingsLinkStyle = block.linkStyle ?? DEFAULT_LINK_STYLE;
   }
 
   function closeBlockSettings() {
@@ -497,6 +508,7 @@
     next = updateBlockSettings(next, active.id, settingsColumnId, settingsBlockId, {
       description: settingsDescription.trim(),
       faviconSize: settingsFaviconSize,
+      linkStyle: settingsLinkStyle,
     });
     commit(next);
     closeBlockSettings();
@@ -1277,6 +1289,20 @@
               onclick={() => (settingsFaviconSize = size)}
             >
               {FAVICON_SIZE_LABEL[size]}
+            </button>
+          {/each}
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>Link style</legend>
+        <div class="seg">
+          {#each LINK_STYLE_OPTIONS as style (style)}
+            <button
+              type="button"
+              class:sel={settingsLinkStyle === style}
+              onclick={() => (settingsLinkStyle = style)}
+            >
+              {LINK_STYLE_LABEL[style]}
             </button>
           {/each}
         </div>
