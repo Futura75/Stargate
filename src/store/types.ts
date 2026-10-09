@@ -9,6 +9,10 @@ export interface Settings {
   theme: Theme;
   searchEngine: SearchEngine;
   faviconSource: FaviconSource;
+  /** Which workspace to open on load: the first one, or the last active one. */
+  openWorkspace?: "first" | "last";
+  /** The workspace id to restore when `openWorkspace` is "last". */
+  lastWorkspaceId?: string;
 }
 
 export interface Background {
@@ -35,6 +39,8 @@ export interface Block {
   description?: string;
   faviconSize?: FaviconSize;
   linkStyle?: LinkStyle;
+  /** When true the block renders as its title alone. */
+  collapsed?: boolean;
   links: Link[];
 }
 
@@ -79,7 +85,7 @@ export interface Workspace {
 }
 
 export interface StargateState {
-  schemaVersion: "3";
+  schemaVersion: "4";
   app: { name: string; version: string };
   exportedAt: string;
   settings: Settings;

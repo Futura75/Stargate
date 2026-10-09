@@ -1,6 +1,6 @@
-import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
+import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, Settings, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
-export const SCHEMA_VERSION = "3" as const;
+export const SCHEMA_VERSION = "4" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
 export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
@@ -12,6 +12,8 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayout = { columnCount: 0, fluid
 export const DEFAULT_BLOCK_TITLE_SIZE: BlockTitleSize = "md";
 /** Default link style for blocks without an explicit `linkStyle`. */
 export const DEFAULT_LINK_STYLE: LinkStyle = "list";
+/** Default startup behavior when `settings.openWorkspace` is absent. */
+export const DEFAULT_OPEN_WORKSPACE = "first" as const;
 
 /** Effective link style of a block: its explicit style, else the default. */
 export function linkStyleOf(block: Pick<Block, "linkStyle">): LinkStyle {
@@ -362,7 +364,7 @@ export function updateBlockSettings(
   workspaceId: string,
   columnId: string,
   blockId: string,
-  patch: { description?: string; faviconSize?: FaviconSize; linkStyle?: LinkStyle },
+  patch: { description?: string; faviconSize?: FaviconSize; linkStyle?: LinkStyle; collapsed?: boolean },
 ): StargateState {
   const blocks = mapBlock(state, workspaceId, columnId, blockId, patch);
   return blocks ?? state;
@@ -753,7 +755,7 @@ export function createDefaultState(now = new Date().toISOString()): StargateStat
     schemaVersion: SCHEMA_VERSION,
     app: { name: APP_NAME, version: APP_VERSION },
     exportedAt: now,
-    settings: { theme: "system", searchEngine: "google", faviconSource: "off" },
+    settings: { theme: "system", searchEngine: "google", faviconSource: "off", openWorkspace: DEFAULT_OPEN_WORKSPACE },
     workspaces: [],
   };
   state = addWorkspace(state, { name: "Personal", icon: "🏠", color: "#5f7161" });
@@ -807,6 +809,7 @@ export function importState(json: string): StargateState {
 const MIGRATIONS: Record<string, (state: any) => any> = {
   "1": migrateV1toV2,
   "2": migrateV2toV3,
+  "3": migrateV3toV4,
 };
 
 /** v1 → v2: fill the new optional appearance/settings fields with their defaults. */
@@ -842,6 +845,28 @@ function migrateV2toV3(state: any): any {
         blocks: (c.blocks ?? []).map((b: any) => ({
           ...b,
           linkStyle: b.linkStyle ?? DEFAULT_LINK_STYLE,
+        })),
+      })),
+    })),
+  };
+}
+
+/** v3 → v4: fill the startup default and every block's collapsed default. */
+function migrateV3toV4(state: any): any {
+  return {
+    ...state,
+    schemaVersion: "4",
+    settings: {
+      ...(state.settings ?? {}),
+      openWorkspace: state.settings?.openWorkspace ?? DEFAULT_OPEN_WORKSPACE,
+    },
+    workspaces: (state.workspaces ?? []).map((w: any) => ({
+      ...w,
+      columns: (w.columns ?? []).map((c: any) => ({
+        ...c,
+        blocks: (c.blocks ?? []).map((b: any) => ({
+          ...b,
+          collapsed: b.collapsed ?? false,
         })),
       })),
     })),
@@ -889,8 +914,16 @@ const LINK_STYLES = new Set(["list", "detail", "tiles"]);
 function sanitizeState(state: StargateState): StargateState {
   return {
     ...state,
+    settings: sanitizeSettings(state.settings),
     workspaces: state.workspaces.map(sanitizeWorkspace),
   };
+}
+
+function sanitizeSettings(settings: Settings): Settings {
+  const sanitized: Settings = { ...settings };
+  if (!isOpenWorkspace(settings.openWorkspace)) delete sanitized.openWorkspace;
+  if (typeof settings.lastWorkspaceId !== "string") delete sanitized.lastWorkspaceId;
+  return sanitized;
 }
 
 function sanitizeWorkspace(w: Workspace): Workspace {
@@ -920,6 +953,7 @@ function sanitizeBlock(b: Block): Block {
   if (typeof b.description !== "string") delete sanitized.description;
   if (!isSize(b.faviconSize)) delete sanitized.faviconSize;
   if (!isLinkStyle(b.linkStyle)) delete sanitized.linkStyle;
+  if (typeof b.collapsed !== "boolean") delete sanitized.collapsed;
   return sanitized;
 }
 
@@ -929,6 +963,10 @@ function isSize(x: unknown): boolean {
 
 function isLinkStyle(x: unknown): boolean {
   return typeof x === "string" && LINK_STYLES.has(x);
+}
+
+function isOpenWorkspace(x: unknown): boolean {
+  return x === "first" || x === "last";
 }
 
 function finiteNumber(value: unknown, fallback: number): number {

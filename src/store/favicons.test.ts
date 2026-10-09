@@ -103,7 +103,12 @@ describe("setFaviconSource", () => {
     const s = seed();
     const next = setFaviconSource(s, source);
     expect(next.settings.faviconSource).toBe(source);
-    expect(next.settings).toEqual({ theme: "system", searchEngine: "google", faviconSource: source });
+    expect(next.settings).toEqual({
+      theme: "system",
+      searchEngine: "google",
+      faviconSource: source,
+      openWorkspace: "first",
+    });
     expect(s.settings.faviconSource).toBe("off");
     expect(next).not.toBe(s);
     expect(next.settings).not.toBe(s.settings);

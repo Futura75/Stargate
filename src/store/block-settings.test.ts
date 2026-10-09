@@ -62,6 +62,14 @@ describe("updateBlockSettings", () => {
     }
   });
 
+  it("sets collapsed on a block", () => {
+    const f = fixture();
+    const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { collapsed: true });
+    expect(blockA(next).collapsed).toBe(true);
+    expect(blockA(f.s).collapsed).toBeUndefined();
+    expect(blockA(next).title).toBe("Welcome");
+  });
+
   it("sets a link style", () => {
     const f = fixture();
     const styles: LinkStyle[] = ["list", "detail", "tiles"];
