@@ -159,6 +159,9 @@
     tiles: "Tiles",
   };
 
+  /** `tiles` renders a fixed 48px favicon regardless of the block's faviconSize (#33). */
+  const TILE_FAVICON_PX = 48;
+
   const BLOCK_TITLE_SIZE_OPTIONS: BlockTitleSize[] = ["sm", "md", "lg"];
   const BLOCK_TITLE_SIZE_LABEL: Record<BlockTitleSize, string> = {
     sm: "Small",
@@ -241,6 +244,11 @@
     if (engine === "ddg") return `https://duckduckgo.com/?q=${q}`;
     if (engine === "bing") return `https://www.bing.com/search?q=${q}`;
     return `https://www.google.com/search?q=${q}`;
+  }
+
+  /** `detail` second line: drop the protocol and any trailing slash for display (#33). */
+  function bareUrl(url: string): string {
+    return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   }
 
   function remoteFaviconUrl(domain: string, source: FaviconSource): string | null {
@@ -1040,6 +1048,7 @@
           </header>
 
           {#each column.blocks as block, blockIndex (block.id)}
+            {@const linkStyle = block.linkStyle ?? DEFAULT_LINK_STYLE}
             <article class="block" ondragover={blockDragOver} ondrop={(e) => dropOnBlock(e, column, blockIndex, block)}>
               <header class="block-head">
                 <h3
@@ -1059,15 +1068,18 @@
                 <p class="block-description">{block.description}</p>
               {/if}
 
-              <div class="links" role="list">
+              <div
+                class={linkStyle === "tiles" ? "tiles" : linkStyle === "detail" ? "detail-links" : "links"}
+                role="list"
+              >
                 {#each block.links as link, linkIndex (link.id)}
                   {@const tile = letterTile(domainOf(link.url))}
                   {@const favicon = link.favicon?.dataUrl}
                   {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
                   {@const faviconSize = block.faviconSize ?? "sm"}
-                  {@const faviconPx = FAVICON_SIZE_PX[faviconSize]}
+                  {@const faviconPx = linkStyle === "tiles" ? TILE_FAVICON_PX : FAVICON_SIZE_PX[faviconSize]}
                   <div
-                    class="link-row"
+                    class={linkStyle === "tiles" ? "tile" : linkStyle === "detail" ? "detail-row" : "link-row"}
                     role="listitem"
                     draggable={true}
                     ondragstart={(e) =>
@@ -1100,7 +1112,16 @@
                           {/if}
                         {/if}
                       </span>
-                      <span class="link-title">{link.title}</span>
+                      {#if linkStyle === "detail"}
+                        <span class="txt">
+                          <span class="title">{link.title}</span>
+                          <span class="url">{bareUrl(link.url)}</span>
+                        </span>
+                      {:else if linkStyle === "tiles"}
+                        <span class="label">{link.title}</span>
+                      {:else}
+                        <span class="link-title">{link.title}</span>
+                      {/if}
                     </a>
                     <div class="mini-row">
                       <button class="mini" title="Link settings" onclick={() => openLinkSettings(column, block, link)}>⚙</button>
