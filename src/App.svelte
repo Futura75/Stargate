@@ -854,7 +854,7 @@
     if (payload.kind === "block") {
       commit(moveBlock(doc, active.id, payload.columnId, column.id, payload.blockId, blockIndex));
     } else {
-      commit(moveLink(doc, active.id, column.id, payload.blockId, block.id, payload.linkId, block.links.length));
+      commit(moveLink(doc, active.id, payload.columnId, column.id, payload.blockId, block.id, payload.linkId, block.links.length));
     }
   }
 
@@ -864,7 +864,7 @@
     e.stopPropagation();
     const payload = drag;
     drag = null;
-    commit(moveLink(doc, active.id, column.id, payload.blockId, block.id, payload.linkId, linkIndex));
+    commit(moveLink(doc, active.id, payload.columnId, column.id, payload.blockId, block.id, payload.linkId, linkIndex));
   }
 
   function kanbanColumnDragOver(e: DragEvent) {
