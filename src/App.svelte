@@ -63,6 +63,8 @@
   } from "./store/bookmarks";
   import { browserCodec } from "./store/codec";
   import { loadState, meterState, saveState } from "./store/persistence";
+  import { SyncEngine, type SyncStatus } from "./store/sync";
+  import { signIn, signOut, supabaseRemote, syncConfigured, watchSession, type OAuthProvider } from "./sync/supabase";
   import type {
     Block,
     BlockTitleSize,
@@ -300,11 +302,109 @@
       doc = next;
       pendingSave = null;
       storageError = null;
+      syncEngine?.notifyLocalChange();
       return true;
     } catch (err) {
       pendingSave = next;
       storageError = err instanceof Error ? err.message : "Could not save your changes.";
       return false;
+    }
+  }
+
+  // ── Remote sync (SPEC §9): optional, only when the build has Supabase settings ──
+
+  let account: { id: string; email: string } | null = $state(null);
+  let syncStatus: SyncStatus = $state("off");
+  let syncMessage: string | null = $state(null);
+  let syncEngine: SyncEngine | null = null;
+  let syncUserId: string | null = null;
+
+  const SYNC_STATUS_LABEL: Record<SyncStatus, string> = {
+    off: "Not signed in.",
+    syncing: "Syncing…",
+    synced: "Up to date.",
+    offline: "Offline — changes will sync when you reconnect.",
+    error: "Sync problem — will retry.",
+  };
+
+  /** The server copy replaced local state (another browser changed it, or first sign-in). */
+  function applyRemoteState(next: StargateState, previous: StargateState, firstLink: boolean) {
+    try {
+      saveState(localStorage, next);
+    } catch {
+      // keep showing the synced copy even if this browser's storage refuses it
+    }
+    doc = next;
+    if (!doc.workspaces.some((w) => w.id === activeId)) activeId = resolveActiveWorkspace(doc)?.id ?? "";
+    if (firstLink) showToast("Loaded the data synced to your account.", previous);
+  }
+
+  function startSync(userId: string) {
+    syncEngine?.stop();
+    syncUserId = userId;
+    syncEngine = new SyncEngine({
+      remote: supabaseRemote(userId),
+      storage: localStorage,
+      userId,
+      getState: () => doc,
+      onRemoteState: applyRemoteState,
+      onStatus: (status, message) => {
+        syncStatus = status;
+        syncMessage = message ?? null;
+      },
+    });
+    void syncEngine.start();
+  }
+
+  function stopSync() {
+    syncEngine?.stop();
+    syncEngine = null;
+    syncUserId = null;
+    syncStatus = "off";
+    syncMessage = null;
+  }
+
+  $effect(() => {
+    if (!syncConfigured) return;
+    const unwatch = watchSession((session) => {
+      const user = session?.user ?? null;
+      if ((user?.id ?? null) === syncUserId) return;
+      if (!user) {
+        account = null;
+        stopSync();
+        return;
+      }
+      account = { id: user.id, email: user.email ?? "" };
+      startSync(user.id);
+    });
+    const resync = () => {
+      if (document.visibilityState === "visible") void syncEngine?.sync();
+    };
+    window.addEventListener("online", resync);
+    window.addEventListener("focus", resync);
+    document.addEventListener("visibilitychange", resync);
+    return () => {
+      unwatch();
+      stopSync();
+      window.removeEventListener("online", resync);
+      window.removeEventListener("focus", resync);
+      document.removeEventListener("visibilitychange", resync);
+    };
+  });
+
+  async function onSignIn(provider: OAuthProvider) {
+    try {
+      await signIn(provider);
+    } catch (err) {
+      showToast(err instanceof Error ? `Sign-in failed: ${err.message}` : "Sign-in failed.");
+    }
+  }
+
+  async function onSignOut() {
+    try {
+      await signOut();
+    } catch (err) {
+      showToast(err instanceof Error ? `Sign-out failed: ${err.message}` : "Sign-out failed.");
     }
   }
 
@@ -1978,6 +2078,32 @@
           </div>
         </section>
 
+        {#if syncConfigured}
+          <section class="section">
+            <div class="section-title">Sync</div>
+            {#if account}
+              <div class="setting">
+                <span>Signed in{account.email ? ` as ${account.email}` : ""}</span>
+                <button type="button" class="btn sm" onclick={onSignOut}>Sign out</button>
+              </div>
+              <p class="help-note" title={syncMessage ?? undefined}>
+                {SYNC_STATUS_LABEL[syncStatus]} Links, tasks and settings sync between your browsers; background images stay on this device.
+              </p>
+            {:else}
+              <div class="setting">
+                <span>Sign in with</span>
+                <div class="seg">
+                  <button type="button" onclick={() => onSignIn("github")}>GitHub</button>
+                  <button type="button" onclick={() => onSignIn("google")}>Google</button>
+                </div>
+              </div>
+              <p class="help-note">
+                Optional. Keeps links, tasks and settings in sync between your browsers. Background images stay on this device.
+              </p>
+            {/if}
+          </section>
+        {/if}
+
         <section class="section">
           <div class="section-title">Your data</div>
           <div class="meter" title={`${formatBytes(usage.totalBytes)} of ~5 MB`}>
@@ -1995,7 +2121,11 @@
             <button class="btn" onclick={onImportBookmarks}>{@html icon("folder")} Import browser bookmarks</button>
           </div>
           <p class="help-note">
-            Everything lives in this browser. In private/incognito windows it is temporary, and it isn't shared between browsers, so export a backup now and then.
+            {#if account}
+              Background images live only in this browser; everything else is also synced to your account. Export a backup now and then.
+            {:else}
+              Everything lives in this browser. In private/incognito windows it is temporary, and it isn't shared between browsers, so export a backup now and then.
+            {/if}
           </p>
         </section>
       </div>

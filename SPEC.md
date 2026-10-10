@@ -170,7 +170,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 
 Not in v1 (revisit as later versions / fresh efforts):
 
-- **Remote sync** (v2 direction): backend choice, conflict resolution, relation to the export schema.
+- **Remote sync** (v2 direction): see §9 for the proposed design.
 - **Browser-extension packaging** (new-tab override) as a future distribution form.
 - Multiple kanban boards per workspace.
 - Custom search shortcuts (`g …`, `yt …`).
@@ -184,3 +184,40 @@ Not in v1 (revisit as later versions / fresh efforts):
 
 - **Implementation of Stargate itself** — this spec is the handoff; the build happens in implementation sessions.
 - **Remote sync infrastructure in v1** (ruled a v2 direction).
+
+## 9. V2 — Remote sync (proposed direction)
+
+Goal: the same user's state stays in sync across *n* browsers, for *m* users, **at zero cost**. Status: **proposal**, not yet built; v1 stays fully static and offline. Full comparison of options: `analisi/sync-costo-zero.md` (project files, Italian).
+
+### 9.1 Platform
+
+- **Supabase, free plan**, called directly from the static app on GitHub Pages — no server code to write or operate.
+- Free-plan limits (as of 2026-05, re-check before building): 500 MB Postgres, 1 GB file storage, 50k monthly active users, 5 GB/month egress, 2 projects. Config-only state is tens of KB, so the database fits thousands of users; **backgrounds are the binding constraint** (1 GB ≈ 300 users at the 3 MB budget; egress is dominated by background downloads → cache them client-side).
+- Free projects **pause after 7 days of inactivity**: a scheduled GitHub Action pings the API daily.
+- Sync code sits behind one module interface (`load`, `save`, `subscribe`) so the backend can be swapped later (Cloudflare Workers + Durable Objects, or a VPS with MongoDB + Redis) without touching the UI.
+
+### 9.2 Storage
+
+- Table `stargate_state`: `user_id` (PK), `data jsonb`, `revision`, `updated_at`; **one row per user** holding the whole state (first implementation; per-workspace rows remain an option if write size or conflicts become a problem). `data` reuses the export schema (§4, §6), including `schemaVersion` and its migrations (a newer server schema is refused, as on import).
+- **Background images do not sync yet**: they are stripped from the payload and stay in the browser that added them; merging a server copy keeps local images by workspace id. Later: Supabase Storage, one folder per user.
+- **Row Level Security**: a user reads and writes only their own row. The public anon key shipped in the app is safe under RLS. SQL: `supabase/schema.sql`.
+
+### 9.3 Sync & conflict resolution
+
+- Implementation: `src/store/sync.ts` (pure `SyncEngine` behind a `RemoteStore` seam, unit-tested) + `src/sync/supabase.ts` (Supabase client, auth, `RemoteStore`).
+- Writes are **optimistic** through the RPC `save_stargate_state(expected_revision, new_data)`: it updates only if the row is still at `expected_revision` (0 = insert first row), bumps it, and returns null on conflict.
+- On conflict the device re-fetches: if it has unpushed edits newer than the server copy's last edit (`exportedAt` stamped by the editing device), they win and are pushed on top; otherwise the server copy is adopted. Whole-document resolution; **per-entity merge** (stable `id`s) is the later step.
+- **First sign-in** of a browser into an account that already has data: the account's copy is adopted, with an Undo toast to keep (and upload) the local copy instead.
+- Local edits are pushed after a 1.5 s quiet period. localStorage stays the local cache, so the app keeps working signed out or offline; pending edits sync on reconnect, tab focus or sign-in.
+- Other browsers learn about changes via **Supabase Realtime** (row change events), plus a re-fetch when the tab regains focus.
+
+### 9.4 Authentication
+
+- **No username/password.**
+- **Sign in with Google and GitHub** via Supabase Auth (OAuth2 / OIDC, PKCE flow for a static site); the GitHub Pages URL is registered as redirect URL. Possible additions: email magic link.
+- Rejected alternatives: Firebase (Cloud Storage needs the paid Blaze plan since 2026-02, so no home for backgrounds; 1 MiB document cap); self-hosted IdPs and free VMs (operational burden).
+
+### 9.5 Open questions
+
+- Sharing a workspace between users (not planned; would need per-row ACLs beyond `user_id`).
+- Whether the background budget or egress cap forces a move to Cloudflare R2/D1 as user count grows.
