@@ -13,6 +13,9 @@ function now(): string {
 }
 
 /** A v1 export: a current default state with schemaVersion rolled back to "1". */
+// Intentionally untyped: this helper simulates a legacy v1 export shape the
+// current types don't describe, and the test mutates/deletes fields on it freely.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function v1File(): any {
   const parsed = JSON.parse(exportState(createDefaultState(now()), now()));
   parsed.schemaVersion = "1";

@@ -1,3 +1,7 @@
+/* eslint-disable max-lines -- this module has grown past the guardrail
+   threshold; splitting it up is pre-existing debt tracked under the
+   code-health follow-ups in #45, not attempted as part of this
+   lint-tooling issue (#51). */
 import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, Settings, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
 export const SCHEMA_VERSION = "4" as const;
@@ -852,6 +856,10 @@ export function importState(json: string): StargateState {
   return deserialize(JSON.stringify(migrated));
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- pre-existing untyped
+   migration chain, tracked for a proper type overhaul in #46. Not fixed here
+   per #51's scope (document legacy debt rather than fix everything). */
+
 /** Migration steps keyed by the version they upgrade FROM. */
 const MIGRATIONS: Record<string, (state: any) => any> = {
   "1": migrateV1toV2,
@@ -933,6 +941,7 @@ function migrate(state: any): any {
   }
   return current;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function compareVersion(a: string, b: string): number {
   const na = Number(a);
