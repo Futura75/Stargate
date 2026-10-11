@@ -1,4 +1,11 @@
 <script lang="ts">
+  /* eslint-disable max-lines -- this file is 2000+ lines of legacy shell
+     code; decomposing it into subcomponents is tracked separately in #48,
+     rather than attempted as part of this lint-tooling issue (#51). */
+  /* eslint-disable svelte/no-at-html-tags -- every {@html} usage in this
+     file renders the static icon() helper below, which only interpolates
+     a hardcoded ICONS[name] string keyed by literal icon names; there is
+     no user-controlled content reaching {@html} here. */
   import {
     addBlock,
     addColumn,
