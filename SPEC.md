@@ -45,16 +45,18 @@ Stargate is an open-source **browser homepage**: a cozy, simple start page for b
 
 - Minimal: a single configurable default engine (**Google / DuckDuckGo / Bing**). Custom search shortcuts are deferred to fog.
 
-### 3.5 Favicons (#2)
+### 3.5 Favicons (#2, #52)
 
 Three-tier resolution, letter tile as the base layer:
 
-1. **Stored data URL** (per-link, highest priority): renders directly, offline, self-contained in the export.
+1. **Stored data URL** (per-link, highest priority): renders directly, offline, self-contained in the export. Only ever a manually-**uploaded** icon (via "Upload icon") — never an auto-resolved remote one, see below.
 2. **Letter tile** (always-present base layer): first letter of the domain on a hue hashed from the domain; pure CSS, zero storage/network.
-3. **Remote service tier** (opt-in, lazy-loaded): `https://icons.duckduckgo.com/ip3/{domain}.ico` **or** `https://www.google.com/s2/favicons?domain={domain}&sz=32`, behind a settings toggle that **defaults to off** (privacy: the provider learns the user's bookmark set).
+3. **Remote service tier**: `https://icons.duckduckgo.com/ip3/{domain}.ico` **or** `https://www.google.com/s2/favicons?domain={domain}&sz=32`, behind a settings toggle that **defaults to `google-s2` (on)** as of #52 — new links auto-resolve a real remote favicon without the user opting in first. Users who want no third party to see their bookmarked domains can still set this to **off** (privacy).
+
+**Real-presence check (#52):** both services return a generic "globe" placeholder image instead of cleanly failing when the target site has no favicon of its own, which a naive `<img onerror>` can't tell apart from a real icon. Since neither sends CORS headers (next bullet), the response bytes can't be read to compare; instead the app loads the candidate into an `<img>` and checks its **intrinsic pixel dimensions** after load (readable cross-origin even without CORS) against each provider's known fixed placeholder size — Google's is always 16×16 regardless of the requested `sz`, DuckDuckGo's is always 48×48 — and falls back to the letter tile when it matches. This runs at render time (effectively "on add", since the new link renders immediately) and the result is cached per `(domain, source)` for the session only — see `isPlaceholderFavicon`/`faviconProbeKey` in `src/store/favicons.ts`.
 
 Hard findings that constrain storage:
-- Google s2 / DDG ip3 send **no CORS headers** → service icons **cannot be hoarded** via fetch/canvas (taint). Only **user-uploaded** icons or **CORS-enabled** site icons can be stored as bytes.
+- Google s2 / DDG ip3 send **no CORS headers** → service icons **cannot be hoarded** via fetch/canvas (taint). Only **user-uploaded** icons or **CORS-enabled** site icons can be stored as bytes. This is also why an auto-resolved remote favicon is never written to a link's stored `favicon` field — it's re-probed each session instead.
 - Canonical stored form: **32×32 PNG**, ~1.2 KB base64/icon; **8 KB** per-icon cap; ~1 MB total warn.
 
 ### 3.6 Backgrounds (#3)
@@ -109,7 +111,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
   "settings": {
     "theme": "system",             // "light" | "dark" | "system"
     "searchEngine": "google",      // "google" | "ddg" | "bing"
-    "faviconSource": "off",        // "off" | "google-s2" | "duckduckgo"  (default "off")
+    "faviconSource": "google-s2",  // "off" | "google-s2" | "duckduckgo"  (default "google-s2")
     "openWorkspace": "first",      // optional: "first" | "last"; absent = "first"
     "lastWorkspaceId": "opaque-random-string"  // optional; restored when openWorkspace = "last"
   },

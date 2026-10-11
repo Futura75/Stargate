@@ -806,7 +806,15 @@ export function createDefaultState(now = new Date().toISOString()): StargateStat
     schemaVersion: SCHEMA_VERSION,
     app: { name: APP_NAME, version: APP_VERSION },
     exportedAt: now,
-    settings: { theme: "system", searchEngine: "google", faviconSource: "off", openWorkspace: DEFAULT_OPEN_WORKSPACE },
+    // Remote favicon fetching defaults to on (#52): new links auto-resolve a real
+    // favicon without the user opting in first. The setting is kept so privacy-
+    // conscious users can still turn it off (see Settings > Favicons).
+    settings: {
+      theme: "system",
+      searchEngine: "google",
+      faviconSource: "google-s2",
+      openWorkspace: DEFAULT_OPEN_WORKSPACE,
+    },
     workspaces: [],
   };
   state = addWorkspace(state, { name: "Personal", icon: "🏠", color: "#5f7161" });
