@@ -39,7 +39,8 @@ export function newId(): string {
 export function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
+  } catch (err) {
+    console.error(err);
     return url;
   }
 }
@@ -847,8 +848,9 @@ export function importState(json: string): StargateState {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
-  } catch {
-    throw new Error("not a valid JSON file");
+  } catch (err) {
+    console.error(err);
+    throw new Error("not a valid JSON file", { cause: err });
   }
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("missing schemaVersion");

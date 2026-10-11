@@ -15,7 +15,8 @@ function canEncodeWebP(): boolean {
     probe.width = 1;
     probe.height = 1;
     return probe.toDataURL("image/webp").startsWith("data:image/webp");
-  } catch {
+  } catch (err) {
+    console.error(err);
     return false;
   }
 }

@@ -159,7 +159,8 @@
   function applyRemoteState(next: StargateState, previous: StargateState, firstLink: boolean) {
     try {
       saveState(localStorage, next);
-    } catch {
+    } catch (err) {
+      console.error(err);
       // keep showing the synced copy even if this browser's storage refuses it
     }
     doc = next;
