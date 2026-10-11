@@ -12,6 +12,7 @@ export default tseslint.config(
       "node_modules/**",
       ".scratch/**",
       "prototype/**",
+      ".claude/**",
     ],
   },
   js.configs.recommended,

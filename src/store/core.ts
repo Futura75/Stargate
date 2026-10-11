@@ -852,33 +852,104 @@ export function importState(json: string): StargateState {
   if (compareVersion(raw.schemaVersion, SCHEMA_VERSION) > 0) {
     throw new Error("made by a newer version of Stargate");
   }
-  const migrated = migrate(raw);
+  // `raw.schemaVersion` is validated as a string above, and migrate() itself
+  // throws at runtime for any version it doesn't know how to step from. This
+  // cast documents that trust boundary — it's the one place untrusted parsed
+  // JSON crosses into the versioned-snapshot types below.
+  const migrated = migrate(raw as unknown as AnyVersionedState);
   return deserialize(JSON.stringify(migrated));
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- pre-existing untyped
-   migration chain, tracked for a proper type overhaul in #46. Not fixed here
-   per #51's scope (document legacy debt rather than fix everything). */
+/* ---------------------------------------------------------------------------
+ * Versioned snapshot types for the migration chain.
+ *
+ * Imported files are untrusted: they merely claim a schemaVersion, and the
+ * migration steps below defensively fall back to defaults for fields that
+ * might be missing (via `??`) regardless of what the nominal shape at that
+ * version requires. These types mirror that leniency — nearly everything is
+ * optional — rather than pretending the data is fully validated; real shape
+ * validation/coercion happens afterwards in sanitizeState(). Their purpose is
+ * to give the migration steps compile-time safety over field access and
+ * document the shape at each step, replacing `any`.
+ * ------------------------------------------------------------------------- */
 
-/** Migration steps keyed by the version they upgrade FROM. */
-const MIGRATIONS: Record<string, (state: any) => any> = {
-  "1": migrateV1toV2,
-  "2": migrateV2toV3,
-  "3": migrateV3toV4,
-};
+interface RawLink {
+  id?: string;
+  title?: string;
+  url?: string;
+  favicon?: unknown;
+}
+
+interface RawBlock {
+  id?: string;
+  title?: string;
+  description?: string;
+  faviconSize?: string;
+  linkStyle?: string;
+  collapsed?: boolean;
+  links?: RawLink[];
+}
+
+interface RawColumn {
+  id?: string;
+  title?: string;
+  blocks?: RawBlock[];
+}
+
+interface RawWorkspace {
+  id?: string;
+  name?: string;
+  icon?: string;
+  color?: string;
+  background?: unknown;
+  columns?: RawColumn[];
+  kanban?: unknown;
+  // `layout`/`blockTitleSize` are fields a migration step actually reads and
+  // defaults, so (unlike the untouched fields above) they keep their real
+  // domain type — a rename in WorkspaceLayout/BlockTitleSize should still be
+  // caught here.
+  layout?: WorkspaceLayout;
+  blockTitleSize?: BlockTitleSize;
+}
+
+interface RawSettings {
+  theme?: unknown;
+  searchEngine?: unknown;
+  faviconSource?: unknown;
+  // Read and defaulted by migrateV3toV4 — kept as the real domain type for
+  // the same reason as `layout`/`blockTitleSize` above.
+  openWorkspace?: Settings["openWorkspace"];
+  lastWorkspaceId?: unknown;
+}
+
+interface RawState<V extends string> {
+  schemaVersion: V;
+  app?: unknown;
+  exportedAt?: unknown;
+  settings?: RawSettings;
+  workspaces?: RawWorkspace[];
+}
+
+type StateV1 = RawState<"1">;
+type StateV2 = RawState<"2">;
+type StateV3 = RawState<"3">;
+type StateV4 = RawState<"4">;
+
+/** Union of every state shape the migration chain can be handed, keyed by schemaVersion. */
+type AnyVersionedState = StateV1 | StateV2 | StateV3 | StateV4;
 
 /** v1 → v2: fill the new optional appearance/settings fields with their defaults. */
-function migrateV1toV2(state: any): any {
+function migrateV1toV2(state: StateV1): StateV2 {
   return {
     ...state,
     schemaVersion: "2",
-    workspaces: (state.workspaces ?? []).map((w: any) => ({
+    workspaces: (state.workspaces ?? []).map((w) => ({
       ...w,
       layout: w.layout ?? DEFAULT_WORKSPACE_LAYOUT,
       blockTitleSize: w.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE,
-      columns: (w.columns ?? []).map((c: any) => ({
+      columns: (w.columns ?? []).map((c) => ({
         ...c,
-        blocks: (c.blocks ?? []).map((b: any) => ({
+        blocks: (c.blocks ?? []).map((b) => ({
           ...b,
           description: b.description ?? "",
           faviconSize: b.faviconSize ?? "sm",
@@ -889,15 +960,15 @@ function migrateV1toV2(state: any): any {
 }
 
 /** v2 → v3: fill every block's link style with the default. */
-function migrateV2toV3(state: any): any {
+function migrateV2toV3(state: StateV2): StateV3 {
   return {
     ...state,
     schemaVersion: "3",
-    workspaces: (state.workspaces ?? []).map((w: any) => ({
+    workspaces: (state.workspaces ?? []).map((w) => ({
       ...w,
-      columns: (w.columns ?? []).map((c: any) => ({
+      columns: (w.columns ?? []).map((c) => ({
         ...c,
-        blocks: (c.blocks ?? []).map((b: any) => ({
+        blocks: (c.blocks ?? []).map((b) => ({
           ...b,
           linkStyle: b.linkStyle ?? DEFAULT_LINK_STYLE,
         })),
@@ -907,7 +978,7 @@ function migrateV2toV3(state: any): any {
 }
 
 /** v3 → v4: fill the startup default and every block's collapsed default. */
-function migrateV3toV4(state: any): any {
+function migrateV3toV4(state: StateV3): StateV4 {
   return {
     ...state,
     schemaVersion: "4",
@@ -915,11 +986,11 @@ function migrateV3toV4(state: any): any {
       ...(state.settings ?? {}),
       openWorkspace: state.settings?.openWorkspace ?? DEFAULT_OPEN_WORKSPACE,
     },
-    workspaces: (state.workspaces ?? []).map((w: any) => ({
+    workspaces: (state.workspaces ?? []).map((w) => ({
       ...w,
-      columns: (w.columns ?? []).map((c: any) => ({
+      columns: (w.columns ?? []).map((c) => ({
         ...c,
-        blocks: (c.blocks ?? []).map((b: any) => ({
+        blocks: (c.blocks ?? []).map((b) => ({
           ...b,
           collapsed: b.collapsed ?? false,
         })),
@@ -929,19 +1000,31 @@ function migrateV3toV4(state: any): any {
 }
 
 /** Walk a state forward to SCHEMA_VERSION, applying one migration step per version. */
-function migrate(state: any): any {
-  let current = state;
+function migrate(state: AnyVersionedState): AnyVersionedState {
+  let current: AnyVersionedState = state;
   while (current.schemaVersion !== SCHEMA_VERSION) {
-    const from = current.schemaVersion;
-    const step = MIGRATIONS[from];
-    if (!step) {
-      throw new Error(`cannot migrate from version ${from}`);
+    // Captured before the switch narrows `current.schemaVersion`: by the
+    // `default` case below, TS has proven every known version handled, so
+    // `current.schemaVersion` itself has narrowed to `never` there and can't
+    // be read directly. `unreachableVersion` keeps its pre-narrowing type so
+    // the error message can still report it.
+    const unreachableVersion = current.schemaVersion;
+    switch (current.schemaVersion) {
+      case "1":
+        current = migrateV1toV2(current);
+        break;
+      case "2":
+        current = migrateV2toV3(current);
+        break;
+      case "3":
+        current = migrateV3toV4(current);
+        break;
+      default:
+        throw new Error(`cannot migrate from version ${unreachableVersion}`);
     }
-    current = step(current);
   }
   return current;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function compareVersion(a: string, b: string): number {
   const na = Number(a);
