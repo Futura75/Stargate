@@ -62,6 +62,7 @@
     type BookmarksTree,
   } from "./store/bookmarks";
   import { browserCodec } from "./store/codec";
+  import { faviconProbeKey, isPlaceholderFavicon, remoteFaviconUrl } from "./store/favicons";
   import { loadState, meterState, saveState } from "./store/persistence";
   import { SyncEngine, type SyncStatus } from "./store/sync";
   import { signIn, signOut, supabaseRemote, syncConfigured, watchSession, type OAuthProvider } from "./sync/supabase";
@@ -90,6 +91,32 @@
 
   const workspaceLayout = $derived(active?.layout ?? DEFAULT_WORKSPACE_LAYOUT);
   const blockTitleSize = $derived(active?.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE);
+
+  /**
+   * In-memory, per-session cache of the real-presence probe result for each
+   * (domain, faviconSource) pair (#52). Not persisted: Google/DuckDuckGo send no
+   * CORS headers (SPEC.md §3.5), so a resolved remote favicon can't be read as
+   * bytes and stored as a data: URL — only an already-loaded <img>'s intrinsic
+   * dimensions are readable, which is what `isPlaceholderFavicon` checks. This
+   * means the check re-runs once per session per domain, not once ever; that's
+   * the deliberate tradeoff for staying consistent with `sanitizeFavicon`,
+   * which still only accepts data: URLs.
+   */
+  let faviconProbeCache: Record<string, boolean> = $state({});
+
+  // `source` is never "off" here: these handlers only fire on the remote <img>,
+  // which is only rendered when `remoteFaviconUrl` returned non-null (see the
+  // favicon snippet below), and that's null exactly when source is "off".
+  function onFaviconProbeLoad(domain: string, source: Exclude<FaviconSource, "off">, img: HTMLImageElement) {
+    const real = !isPlaceholderFavicon(source, { width: img.naturalWidth, height: img.naturalHeight });
+    faviconProbeCache = { ...faviconProbeCache, [faviconProbeKey(domain, source)]: real };
+    if (!real) img.style.display = "none";
+  }
+
+  function onFaviconProbeError(domain: string, source: Exclude<FaviconSource, "off">, img: HTMLImageElement) {
+    faviconProbeCache = { ...faviconProbeCache, [faviconProbeKey(domain, source)]: false };
+    img.style.display = "none";
+  }
 
   type DragPayload =
     | { kind: "workspace"; workspaceId: string }
@@ -479,16 +506,6 @@
   /** `detail` second line: drop the protocol and any trailing slash for display (#33). */
   function bareUrl(url: string): string {
     return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  }
-
-  function remoteFaviconUrl(domain: string, source: FaviconSource): string | null {
-    if (source === "google-s2") {
-      return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
-    }
-    if (source === "duckduckgo") {
-      return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;
-    }
-    return null;
   }
 
   function linkCount(ws: Workspace): number {
@@ -1457,9 +1474,12 @@
 <svelte:window onkeydown={onWindowKeydown} />
 
 {#snippet favicon(link: Link, px: number)}
-  {@const tile = letterTile(domainOf(link.url))}
+  {@const domain = domainOf(link.url)}
+  {@const tile = letterTile(domain)}
   {@const stored = link.favicon?.dataUrl}
-  {@const remote = remoteFaviconUrl(domainOf(link.url), doc.settings.faviconSource)}
+  {@const source = doc.settings.faviconSource}
+  {@const remote = remoteFaviconUrl(domain, source)}
+  {@const probed = remote ? faviconProbeCache[faviconProbeKey(domain, source)] : undefined}
   <span
     class="favicon"
     style:background={stored ? undefined : `hsl(${tile.hue} 40% 46%)`}
@@ -1469,7 +1489,7 @@
       <img class="favicon-img" src={stored} alt="" width={px} height={px} draggable={false} />
     {:else}
       <span class="tile-letter" aria-hidden="true">{tile.letter}</span>
-      {#if remote}
+      {#if remote && probed !== false}
         <img
           class="favicon-img"
           loading="lazy"
@@ -1478,7 +1498,10 @@
           width={px}
           height={px}
           draggable={false}
-          onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+          onload={(e) =>
+            onFaviconProbeLoad(domain, source as Exclude<FaviconSource, "off">, e.currentTarget as HTMLImageElement)}
+          onerror={(e) =>
+            onFaviconProbeError(domain, source as Exclude<FaviconSource, "off">, e.currentTarget as HTMLImageElement)}
         />
       {/if}
     {/if}
@@ -2057,7 +2080,7 @@
               {/each}
             </div>
           </div>
-          <p class="help-note">Off by default: the provider would see the list of sites you bookmark. Letter tiles always work offline.</p>
+          <p class="help-note">On by default for new links: the chosen provider would see the list of sites you bookmark. Turn this off for full privacy — letter tiles always work offline.</p>
         </section>
 
         <section class="section">
