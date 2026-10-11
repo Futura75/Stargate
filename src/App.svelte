@@ -591,6 +591,7 @@
       const step = e.key === "ArrowDown" ? 1 : -1;
       searchSel = (searchSel + step + suggestions.length) % suggestions.length;
     } else if (e.key === "Escape") {
+      e.preventDefault();
       searchQuery = "";
       searchInput?.blur();
     }
@@ -1539,6 +1540,9 @@
           placeholder="Search the web or your links"
           aria-label="Search"
           autocomplete="off"
+          type="search"
+          inputmode="search"
+          enterkeyhint="search"
         />
         <select
           aria-label="Search engine"
@@ -2436,6 +2440,9 @@
           placeholder="Search links, workspaces, actions or the web"
           aria-label="Quick actions"
           autocomplete="off"
+          type="search"
+          inputmode="search"
+          enterkeyhint="go"
           use:autofocus
         />
         <kbd>esc</kbd>

@@ -258,6 +258,13 @@ kbd {
   border: 0;
   background: transparent;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search input::-webkit-search-cancel-button,
+.search input::-webkit-search-decoration {
+  display: none;
 }
 
 .search select {
@@ -1571,6 +1578,13 @@ input[type="checkbox"] {
   outline: none;
   background: transparent;
   font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.palette-input input::-webkit-search-cancel-button,
+.palette-input input::-webkit-search-decoration {
+  display: none;
 }
 
 .palette-list {
