@@ -331,7 +331,8 @@
   function applyRemoteState(next: StargateState, previous: StargateState, firstLink: boolean) {
     try {
       saveState(localStorage, next);
-    } catch {
+    } catch (err) {
+      console.error(err);
       // keep showing the synced copy even if this browser's storage refuses it
     }
     doc = next;
@@ -678,7 +679,8 @@
         try {
           const favicon = await browserCodec.normalizeFavicon(dataUrl);
           commit(setFavicon(doc, wsId, columnId, blockId, linkId, favicon));
-        } catch {
+        } catch (err) {
+          console.error(err);
           showToast("That image can't be used as an icon (max 8 KB after scaling).");
         }
       };

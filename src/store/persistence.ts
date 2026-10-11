@@ -115,7 +115,8 @@ export function loadState(storage: StorageLike, now?: string): LoadResult {
   if (raw !== null) {
     try {
       return { state: importState(raw), recovered: false };
-    } catch {
+    } catch (err) {
+      console.error(err);
       // main key is unparsable — fall through to the shadow copy
     }
   }
@@ -126,11 +127,13 @@ export function loadState(storage: StorageLike, now?: string): LoadResult {
       const state = importState(shadow);
       try {
         saveState(storage, state);
-      } catch {
+      } catch (err) {
+        console.error(err);
         // recovery still succeeds even if persisting the restored copy fails
       }
       return { state, recovered: true };
-    } catch {
+    } catch (err) {
+      console.error(err);
       // shadow copy is also unparsable — fall through to seed
     }
   }

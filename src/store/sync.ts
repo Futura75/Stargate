@@ -49,7 +49,8 @@ export function loadSyncMeta(storage: StorageLike): SyncMeta {
       dirty: parsed.dirty === true,
       localChangedAt: typeof parsed.localChangedAt === "string" ? parsed.localChangedAt : null,
     };
-  } catch {
+  } catch (err) {
+    console.error(err);
     return { ...EMPTY_META };
   }
 }
@@ -256,7 +257,8 @@ export class SyncEngine {
   private persistMeta(): void {
     try {
       saveSyncMeta(this.opts.storage, this.meta);
-    } catch {
+    } catch (err) {
+      console.error(err);
       // bookkeeping is best-effort; worst case the next sync re-fetches
     }
   }
