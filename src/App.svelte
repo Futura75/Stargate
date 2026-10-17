@@ -49,6 +49,7 @@
   import BookmarksImportFlow from "./components/BookmarksImportFlow.svelte";
   import ToastHost from "./components/ToastHost.svelte";
   import type { AddingKind, DragPayload } from "./components/dragTypes";
+  import { applySkin, previewSkin } from "./skin";
 
   const loaded = loadState(localStorage);
   let doc: StargateState = $state(loaded.state);
@@ -124,6 +125,10 @@
   $effect(() => {
     document.body.dataset.resolved = resolvedTheme;
     document.body.dataset.theme = doc.settings.theme;
+  });
+
+  $effect(() => {
+    applySkin(previewSkin() ?? doc.settings.skin);
   });
 
   $effect(() => {

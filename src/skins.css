@@ -1,0 +1,625 @@
+/* Stargate skins — alternative visual worlds layered on the "Dock" layout.
+   Each skin lends type, palette, density and one signature move; structure and controls stay put.
+   The original look ("salvia") lives in app.css and applies when no data-skin override matches. */
+
+/* =====================================================================
+   GIARDINO — a zoo-gardens guide map: flat colour lobes on cream "water"
+   ===================================================================== */
+
+body[data-skin="giardino"] {
+  --bg: #f5f1e4;
+  --surface: #fffdf6;
+  --surface-2: #ece7d4;
+  --ink: #2c2e2a;
+  --ink-soft: #4d5147;
+  --ink-faint: #6b6f62;
+  --line: #ddd7c1;
+  --line-strong: #b9b39a;
+  --accent: #2c2e2a;
+  --on-accent: #2c2e2a;
+  --danger: #b23b27;
+  --warn: #8f5d0e;
+  --lobe-1: #c4e6a6;
+  --lobe-2: #f4ec9c;
+  --lobe-3: #e6d6f3;
+  --action: #f5e211;
+  --shadow-1: 0 1px 2px rgb(44 46 42 / 0.08);
+  --shadow-2: 0 1px 2px rgb(44 46 42 / 0.08), 0 8px 20px -8px rgb(44 46 42 / 0.2);
+  --shadow-3: 0 2px 6px rgb(44 46 42 / 0.12), 0 24px 56px -14px rgb(44 46 42 / 0.32);
+  --font-body: "Familjen Grotesk", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Familjen Grotesk", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --radius: 30px;
+}
+
+body[data-skin="giardino"][data-resolved="dark"] {
+  --bg: #1a2418;
+  --surface: #243222;
+  --surface-2: #2c3c29;
+  --ink: #f3efdd;
+  --ink-soft: #c9cfb8;
+  --ink-faint: #9ba58e;
+  --line: #34452f;
+  --line-strong: #4b6143;
+  --accent: #f5e211;
+  --on-accent: #2c2e2a;
+  --danger: #f08c78;
+  --warn: #e6b45a;
+  --lobe-1: #35552d;
+  --lobe-2: #4f4a22;
+  --lobe-3: #413657;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-3: 0 2px 8px rgb(0 0 0 / 0.5), 0 28px 64px -14px rgb(0 0 0 / 0.65);
+}
+
+body[data-skin="giardino"] .hero h1 {
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+body[data-skin="giardino"] :is(.col-title, .block-head h3, .kanban-col-title) {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Blocks are lobes: flat fields, no border or blur, a coastline for a corner radius. */
+body[data-skin="giardino"] .block {
+  background: var(--surface);
+  backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 38px 22px 40px 26px;
+  padding: 16px 14px 12px;
+}
+
+body[data-skin="giardino"] .block:hover {
+  box-shadow: none;
+}
+
+body[data-skin="giardino"] .col > .block:nth-of-type(3n + 1) {
+  background: var(--lobe-1);
+}
+body[data-skin="giardino"] .col > .block:nth-of-type(3n + 2) {
+  background: var(--lobe-2);
+  border-radius: 24px 40px 22px 36px;
+}
+body[data-skin="giardino"] .col > .block:nth-of-type(3n) {
+  background: var(--lobe-3);
+  border-radius: 30px 28px 42px 20px;
+}
+body[data-skin="giardino"] .block-collapsed {
+  opacity: 0.88;
+}
+
+body[data-skin="giardino"] .link:hover {
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+/* Controls are capsules; the one saturated colour marks what you can press. */
+body[data-skin="giardino"] .btn,
+body[data-skin="giardino"] .seg,
+body[data-skin="giardino"] .seg button,
+body[data-skin="giardino"] .search,
+body[data-skin="giardino"] .dock,
+body[data-skin="giardino"] .dock-btn,
+body[data-skin="giardino"] .dock-ws,
+body[data-skin="giardino"] .ghost-add,
+body[data-skin="giardino"] .toast {
+  border-radius: 999px;
+}
+
+body[data-skin="giardino"] .btn.primary {
+  background: var(--action);
+  color: #2c2e2a;
+  border-color: transparent;
+}
+
+body[data-skin="giardino"] .seg button.sel {
+  background: var(--action);
+  color: #2c2e2a;
+  box-shadow: none;
+}
+
+body[data-skin="giardino"] .search {
+  border-color: transparent;
+  height: 56px;
+  box-shadow: var(--shadow-1);
+}
+
+body[data-skin="giardino"] .dock {
+  backdrop-filter: none;
+  background: var(--surface);
+  border-color: transparent;
+}
+
+body[data-skin="giardino"] .dock-ws {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body[data-skin="giardino"] .dock-ws.active::after {
+  width: 22px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--action);
+  bottom: -1px;
+}
+
+body[data-skin="giardino"] .dock-btn.active {
+  background: var(--action);
+  color: #2c2e2a;
+}
+
+body[data-skin="giardino"] .dock-badge {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+body[data-skin="giardino"] .kanban-col {
+  backdrop-filter: none;
+  background: var(--lobe-1);
+  border-color: transparent;
+  border-radius: 34px 22px 36px 24px;
+}
+body[data-skin="giardino"] .kanban-col:nth-child(3n + 2) {
+  background: var(--lobe-2);
+}
+body[data-skin="giardino"] .kanban-col:nth-child(3n) {
+  background: var(--lobe-3);
+}
+body[data-skin="giardino"] .kanban-task {
+  border-color: transparent;
+  border-radius: 20px;
+  box-shadow: none;
+  background: var(--surface);
+}
+
+body[data-skin="giardino"] .switch.on {
+  background: var(--action);
+}
+
+body[data-skin="giardino"] ::selection {
+  background: var(--action);
+  color: #2c2e2a;
+}
+
+/* =====================================================================
+   ATLANTE — a star-atlas chart: hairline plates, italic serif names,
+   night-vision red for the object under the eye
+   ===================================================================== */
+
+body[data-skin="atlante"] {
+  --bg: #e6ebf1;
+  --surface: #f3f6fa;
+  --surface-2: #dce3ec;
+  --ink: #13203a;
+  --ink-soft: #3f4d69;
+  --ink-faint: #5a6881;
+  --line: #c3cedc;
+  --line-strong: #a5b3c6;
+  --accent: #1f3f7a;
+  --on-accent: #ffffff;
+  --danger: #a8301f;
+  --warn: #8a5a0b;
+  --ring: #b23a26;
+  --star: rgb(19 32 58 / 0.17);
+  --star-big: rgb(19 32 58 / 0.26);
+  --shadow-1: none;
+  --shadow-2: 0 1px 2px rgb(19 32 58 / 0.1), 0 6px 16px -8px rgb(19 32 58 / 0.22);
+  --shadow-3: 0 2px 6px rgb(19 32 58 / 0.14), 0 24px 56px -14px rgb(19 32 58 / 0.34);
+  --font-body: "Hanken Grotesk", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Spectral", "Iowan Old Style", Georgia, serif;
+  --radius: 4px;
+  --r-ctl: 4px;
+}
+
+body[data-skin="atlante"][data-resolved="dark"] {
+  --bg: #0a1224;
+  --surface: #0f1a33;
+  --surface-2: #15234a;
+  --ink: #e9eef8;
+  --ink-soft: #aebbd3;
+  --ink-faint: #8493b0;
+  --line: #1f2e50;
+  --line-strong: #2e4170;
+  --accent: #e9a44c;
+  --on-accent: #0a1224;
+  --danger: #f0806e;
+  --warn: #e9a44c;
+  --ring: #ef5b45;
+  --star: rgb(233 238 248 / 0.2);
+  --star-big: rgb(233 238 248 / 0.34);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px -8px rgb(0 0 0 / 0.6);
+  --shadow-3: 0 2px 8px rgb(0 0 0 / 0.55), 0 28px 64px -14px rgb(0 0 0 / 0.75);
+}
+
+/* A sky of magnitudes: three dot sizes on three offset lattices. */
+body[data-skin="atlante"] {
+  background-image:
+    radial-gradient(circle, var(--star) 0.9px, transparent 1.4px),
+    radial-gradient(circle, var(--star) 0.7px, transparent 1.2px),
+    radial-gradient(circle, var(--star-big) 1.7px, transparent 2.3px);
+  background-size: 37px 37px, 61px 61px, 173px 173px;
+  background-position: 0 0, 17px 23px, 71px 97px;
+  background-attachment: fixed;
+}
+
+body[data-skin="atlante"] :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+body[data-skin="atlante"] .hero h1 {
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+body[data-skin="atlante"] :is(.col-title, .block-head h3, .kanban-col-title) {
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+body[data-skin="atlante"] .col-title {
+  font-size: 18px;
+}
+body[data-skin="atlante"] .block-head h3 {
+  font-size: var(--block-title-size, 17px);
+}
+
+body[data-skin="atlante"] :is(.count, .due-chip, .hero-meta, .dock-badge, .link-detail .url, kbd) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Plates: hairline frame with crop ticks at the corners. */
+body[data-skin="atlante"] .block {
+  position: relative;
+  background: var(--surface);
+  backdrop-filter: none;
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+
+body[data-skin="atlante"] .block::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ink-faint), var(--ink-faint)) top left / 9px 1px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) top left / 1px 9px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) top right / 9px 1px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) top right / 1px 9px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) bottom left / 9px 1px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) bottom left / 1px 9px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) bottom right / 9px 1px no-repeat,
+    linear-gradient(var(--ink-faint), var(--ink-faint)) bottom right / 1px 9px no-repeat;
+}
+
+body[data-skin="atlante"] .block:hover {
+  border-color: var(--ink-faint);
+  box-shadow: none;
+}
+
+body[data-skin="atlante"] .col:nth-child(3n + 1) > .block:first-of-type {
+  background: var(--surface);
+}
+
+body[data-skin="atlante"] .block-collapsed {
+  background: var(--surface-2);
+}
+
+/* The object under the eye is ringed in red. */
+body[data-skin="atlante"] .link:hover {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+body[data-skin="atlante"] .dock {
+  backdrop-filter: none;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+
+body[data-skin="atlante"] .dock-ws {
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+}
+
+body[data-skin="atlante"] .dock-ws.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ring);
+}
+body[data-skin="atlante"] .dock-ws.active::after {
+  display: none;
+}
+
+body[data-skin="atlante"] .dock-btn {
+  border-radius: 50%;
+}
+
+body[data-skin="atlante"] .dock-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+body[data-skin="atlante"] .dock-badge {
+  background: var(--ring);
+  color: #ffffff;
+}
+
+body[data-skin="atlante"] .btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+body[data-skin="atlante"] .search {
+  border-radius: 4px;
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+body[data-skin="atlante"] .search:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+body[data-skin="atlante"] .kanban-col {
+  backdrop-filter: none;
+  background: var(--surface);
+  border-color: var(--line-strong);
+}
+body[data-skin="atlante"] .kanban-task {
+  box-shadow: none;
+  background: var(--surface-2);
+}
+
+body[data-skin="atlante"] ::selection {
+  background: var(--ring);
+  color: #ffffff;
+}
+
+/* =====================================================================
+   RETICOLO — a Crouwel construction grid: visible armature, square cells,
+   one cobalt plane
+   ===================================================================== */
+
+body[data-skin="reticolo"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eff2ff;
+  --ink: #0b0d1a;
+  --ink-soft: #3f4566;
+  --ink-faint: #5a6085;
+  --line: #cbd3f2;
+  --line-strong: #8e9ad2;
+  --rule: #0b0d1a;
+  --grid: #e3e8fb;
+  --accent: #2b3cff;
+  --on-accent: #ffffff;
+  --danger: #c4281a;
+  --warn: #8f5d0e;
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: 0 2px 4px rgb(11 13 26 / 0.12), 0 20px 48px -12px rgb(11 13 26 / 0.3);
+  --font-body: "Archivo", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --radius: 0px;
+  --r-ctl: 0px;
+}
+
+body[data-skin="reticolo"][data-resolved="dark"] {
+  --bg: #090b1c;
+  --surface: #0f1230;
+  --surface-2: #171b47;
+  --ink: #f3f5ff;
+  --ink-soft: #b7bee6;
+  --ink-faint: #8a93c4;
+  --line: #1e2556;
+  --line-strong: #3a4590;
+  --rule: #5360b8;
+  --grid: #131744;
+  --accent: #5b6bff;
+  --on-accent: #ffffff;
+  --danger: #ff8a7a;
+  --warn: #f0b45a;
+  --shadow-3: 0 2px 6px rgb(0 0 0 / 0.5), 0 24px 56px -12px rgb(0 0 0 / 0.7);
+}
+
+/* The grid is the armature, shown as it is drawn. */
+body[data-skin="reticolo"] {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
+}
+
+body[data-skin="reticolo"] .page {
+  padding-inline: 24px;
+}
+
+body[data-skin="reticolo"] .hero h1 {
+  font-size: clamp(44px, 8vw, 92px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  color: var(--ink);
+}
+
+body[data-skin="reticolo"] :is(.col-title, .kanban-col-title) {
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+body[data-skin="reticolo"] .block-head h3 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+body[data-skin="reticolo"] :is(.count, .due-chip, .hero-meta, .link-detail .url) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Square cells, one border weight. */
+body[data-skin="reticolo"]
+  :is(
+    .block,
+    .col,
+    .kanban-col,
+    .kanban-task,
+    .dock,
+    .dock-ws,
+    .dock-btn,
+    .search,
+    .btn,
+    .icon-btn,
+    .seg,
+    .seg button,
+    .link,
+    .link > a,
+    .link-body,
+    .dialog,
+    .toast,
+    .palette,
+    .result,
+    .add-tile,
+    .ghost-add,
+    .field input:not([type="range"]):not([type="color"]),
+    kbd
+  ) {
+  border-radius: 0;
+}
+
+body[data-skin="reticolo"] .block {
+  background: var(--surface);
+  backdrop-filter: none;
+  border: 1px solid var(--rule);
+  box-shadow: none;
+}
+body[data-skin="reticolo"] .block:hover {
+  box-shadow: none;
+  background: var(--surface-2);
+}
+
+/* The single accent plane: the first block of the first column. */
+body[data-skin="reticolo"] .col:nth-child(3n + 1) > .block:first-of-type {
+  background: var(--surface);
+}
+body[data-skin="reticolo"] .cols > .col:first-child > .block:first-of-type {
+  --ink: #ffffff;
+  --ink-soft: #e1e5ff;
+  --ink-faint: #cdd3ff;
+  --surface-2: rgb(255 255 255 / 0.14);
+  --line: rgb(255 255 255 / 0.3);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+body[data-skin="reticolo"] .link:hover {
+  background: var(--surface-2);
+}
+
+body[data-skin="reticolo"] .dock {
+  backdrop-filter: none;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+
+body[data-skin="reticolo"] .dock-ws {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+}
+body[data-skin="reticolo"] .dock-ws.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+body[data-skin="reticolo"] .dock-ws.active::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: var(--accent);
+}
+body[data-skin="reticolo"] .dock-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+body[data-skin="reticolo"] .dock-badge {
+  border-radius: 0;
+  background: var(--accent);
+}
+body[data-skin="reticolo"] .dock-tip {
+  border-radius: 0;
+}
+
+body[data-skin="reticolo"] .search {
+  height: 56px;
+  border: 1px solid var(--rule);
+  box-shadow: none;
+}
+body[data-skin="reticolo"] .search:focus-within {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+body[data-skin="reticolo"] .btn {
+  border-color: var(--rule);
+}
+body[data-skin="reticolo"] .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+body[data-skin="reticolo"] .seg {
+  background: transparent;
+  border: 1px solid var(--rule);
+  gap: 0;
+  padding: 0;
+}
+body[data-skin="reticolo"] .seg button.sel {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+body[data-skin="reticolo"] .kanban-col {
+  backdrop-filter: none;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+body[data-skin="reticolo"] .kanban-task {
+  box-shadow: none;
+  border-color: var(--line-strong);
+}
+
+body[data-skin="reticolo"] .dialog {
+  border-color: var(--rule);
+}
+
+body[data-skin="reticolo"] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0;
+}
+
+body[data-skin="reticolo"] ::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* =====================================================================
+   Shared: control radius for the two angular skins, scrollbars
+   ===================================================================== */
+
+body[data-skin="atlante"]
+  :is(.btn, .icon-btn, .seg, .seg button, .link, .link > a, .link-body, .kanban-task, .dialog, .toast, .palette, .result, .add-tile, .ghost-add) {
+  border-radius: var(--r-ctl);
+}
+
+body[data-skin="giardino"],
+body[data-skin="atlante"],
+body[data-skin="reticolo"] {
+  caret-color: var(--accent);
+  scrollbar-color: var(--line-strong) transparent;
+}

@@ -2,7 +2,7 @@
    threshold; splitting it up is pre-existing debt tracked under the
    code-health follow-ups in #45, not attempted as part of this
    lint-tooling issue (#51). */
-import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, Settings, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
+import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, Settings, Skin, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
 export const SCHEMA_VERSION = "4" as const;
 export const APP_NAME = "Stargate" as const;
@@ -18,6 +18,11 @@ export const DEFAULT_BLOCK_TITLE_SIZE: BlockTitleSize = "md";
 export const DEFAULT_LINK_STYLE: LinkStyle = "list";
 /** Default startup behavior when `settings.openWorkspace` is absent. */
 export const DEFAULT_OPEN_WORKSPACE = "first" as const;
+
+/** Every selectable look, in display order. */
+export const SKINS: readonly Skin[] = ["salvia", "giardino", "atlante", "reticolo"];
+/** Look used when `settings.skin` is absent. */
+export const DEFAULT_SKIN: Skin = "salvia";
 
 /** Effective link style of a block: its explicit style, else the default. */
 export function linkStyleOf(block: Pick<Block, "linkStyle">): LinkStyle {
@@ -112,6 +117,10 @@ export function setSearchEngine(state: StargateState, engine: SearchEngine): Sta
 
 export function setTheme(state: StargateState, theme: Theme): StargateState {
   return { ...state, settings: { ...state.settings, theme } };
+}
+
+export function setSkin(state: StargateState, skin: Skin): StargateState {
+  return { ...state, settings: { ...state.settings, skin } };
 }
 
 export function setFaviconSource(state: StargateState, source: FaviconSource): StargateState {
@@ -1072,6 +1081,7 @@ function sanitizeSettings(settings: Settings): Settings {
   const sanitized: Settings = { ...settings };
   if (!isOpenWorkspace(settings.openWorkspace)) delete sanitized.openWorkspace;
   if (typeof settings.lastWorkspaceId !== "string") delete sanitized.lastWorkspaceId;
+  if (!SKINS.includes(settings.skin as Skin)) delete sanitized.skin;
   return sanitized;
 }
 

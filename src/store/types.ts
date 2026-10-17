@@ -4,6 +4,7 @@ export type FaviconSource = "off" | "google-s2" | "duckduckgo";
 export type FaviconSize = "sm" | "md" | "lg";
 export type BlockTitleSize = "sm" | "md" | "lg";
 export type LinkStyle = "list" | "detail" | "tiles";
+export type Skin = "salvia" | "giardino" | "atlante" | "reticolo";
 
 export interface Settings {
   theme: Theme;
@@ -13,6 +14,8 @@ export interface Settings {
   openWorkspace?: "first" | "last";
   /** The workspace id to restore when `openWorkspace` is "last". */
   lastWorkspaceId?: string;
+  /** Visual look; absent = "salvia" (the original). Unknown values are dropped on load. */
+  skin?: Skin;
 }
 
 export interface Background {

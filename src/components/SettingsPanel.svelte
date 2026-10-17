@@ -6,7 +6,10 @@
   import {
     setFaviconSource,
     setSearchEngine,
+    setSkin,
     setTheme,
+    DEFAULT_SKIN,
+    SKINS,
     DEFAULT_BLOCK_TITLE_SIZE,
     DEFAULT_OPEN_WORKSPACE,
     DEFAULT_WORKSPACE_LAYOUT,
@@ -17,6 +20,7 @@
   import { icon } from "./icons";
   import { BLOCK_TITLE_SIZE_LABEL, BLOCK_TITLE_SIZE_OPTIONS } from "./blockDisplay";
   import { formatBytes } from "./format";
+  import { SKIN_LABEL, SKIN_NOTE } from "../skin";
 
   let {
     open,
@@ -122,6 +126,16 @@
               {#each THEME_CYCLE as theme (theme)}
                 <button type="button" class:sel={doc.settings.theme === theme} onclick={() => commit(setTheme(doc, theme))}>
                   {@html icon(THEME_ICON[theme])}{THEME_LABEL[theme]}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="setting">
+            <span>Look</span>
+            <div class="seg">
+              {#each SKINS as s (s)}
+                <button type="button" class:sel={(doc.settings.skin ?? DEFAULT_SKIN) === s} title={SKIN_NOTE[s]} onclick={() => commit(setSkin(doc, s))}>
+                  {SKIN_LABEL[s]}
                 </button>
               {/each}
             </div>
