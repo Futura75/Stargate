@@ -21,6 +21,7 @@ describe("setSearchEngine", () => {
       theme: "system",
       searchEngine: engine,
       faviconSource: "google-s2",
+      language: "it",
       openWorkspace: "first",
     });
     expect(s.settings.searchEngine).toBe("google");
@@ -39,6 +40,7 @@ describe("setTheme", () => {
       theme,
       searchEngine: "google",
       faviconSource: "google-s2",
+      language: "it",
       openWorkspace: "first",
     });
     expect(s.settings.theme).toBe("system");

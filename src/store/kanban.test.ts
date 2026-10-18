@@ -27,7 +27,7 @@ function kanban(s: StargateState) {
 describe("kanban defaults", () => {
   it("seeds a workspace with Todo / In Progress / Done and empty tasks", () => {
     const s = seed();
-    expect(kanban(s).map((c) => c.title)).toEqual(["Todo", "In Progress", "Done"]);
+    expect(kanban(s).map((c) => c.title)).toEqual(["Da fare", "In corso", "Fatto"]);
     for (const c of kanban(s)) expect(c.tasks).toEqual([]);
   });
 });
@@ -36,7 +36,7 @@ describe("kanban columns", () => {
   it("adds a column in positional order", () => {
     const s = seed();
     const next = addKanbanColumn(s, wsId(s), "Backlog");
-    expect(kanban(next).map((c) => c.title)).toEqual(["Todo", "In Progress", "Done", "Backlog"]);
+    expect(kanban(next).map((c) => c.title)).toEqual(["Da fare", "In corso", "Fatto", "Backlog"]);
     expect(kanban(next)[3].tasks).toEqual([]);
     expect(s.workspaces[0].kanban.columns).toHaveLength(3);
   });
@@ -45,14 +45,14 @@ describe("kanban columns", () => {
     const s = seed();
     const id = kanban(s)[0].id;
     const next = renameKanbanColumn(s, wsId(s), id, "To Do");
-    expect(kanban(next).map((c) => c.title)).toEqual(["To Do", "In Progress", "Done"]);
+    expect(kanban(next).map((c) => c.title)).toEqual(["To Do", "In corso", "Fatto"]);
   });
 
   it("deletes a column and keeps its siblings", () => {
     const s = seed();
     const id = kanban(s)[1].id;
     const next = deleteKanbanColumn(s, wsId(s), id);
-    expect(kanban(next).map((c) => c.title)).toEqual(["Todo", "Done"]);
+    expect(kanban(next).map((c) => c.title)).toEqual(["Da fare", "Fatto"]);
   });
 
   it("keeps at least one column", () => {
@@ -68,7 +68,7 @@ describe("kanban columns", () => {
     const s = seed();
     const id = kanban(s)[2].id;
     const next = reorderKanbanColumn(s, wsId(s), id, 0);
-    expect(kanban(next).map((c) => c.title)).toEqual(["Done", "Todo", "In Progress"]);
+    expect(kanban(next).map((c) => c.title)).toEqual(["Fatto", "Da fare", "In corso"]);
   });
 });
 

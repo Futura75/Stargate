@@ -42,10 +42,10 @@ describe("adding a kanban task", () => {
     const props = baseProps(doc);
     render(KanbanBoard, { props });
 
-    const todoColumn = screen.getByRole("group", { name: "Todo column" });
-    await fireEvent.click(within(todoColumn).getByRole("button", { name: /Add task/ }));
+    const todoColumn = screen.getByRole("group", { name: "Colonna Da fare" });
+    await fireEvent.click(within(todoColumn).getByRole("button", { name: /Aggiungi attività/ }));
 
-    const input = within(todoColumn).getByLabelText("New task");
+    const input = within(todoColumn).getByLabelText("Nuova attività");
     await fireEvent.input(input, { target: { value: "Write spec" } });
     await fireEvent.submit(input.closest("form")!);
 
@@ -64,7 +64,7 @@ describe("moving a kanban task between columns", () => {
     render(KanbanBoard, { props });
 
     const taskRow = screen.getByText("T1").closest('[role="listitem"]') as HTMLElement;
-    const doneColumn = screen.getByRole("group", { name: "Done column" });
+    const doneColumn = screen.getByRole("group", { name: "Colonna Fatto" });
 
     await fireEvent.dragStart(taskRow, { dataTransfer: dataTransfer() });
     await fireEvent.dragOver(doneColumn, { dataTransfer: dataTransfer() });

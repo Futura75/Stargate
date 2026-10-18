@@ -203,6 +203,7 @@ describe("setFaviconSource", () => {
       theme: "system",
       searchEngine: "google",
       faviconSource: source,
+      language: "it",
       openWorkspace: "first",
     });
     expect(s.settings.faviconSource).toBe("google-s2");

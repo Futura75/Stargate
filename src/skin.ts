@@ -12,13 +12,6 @@ export const SKIN_LABEL: Record<Skin, string> = {
   reticolo: "Reticolo",
 };
 
-export const SKIN_NOTE: Record<Skin, string> = {
-  salvia: "The original soft sage look.",
-  giardino: "Flat colour lobes on a cream map ground, capsule controls.",
-  atlante: "Star-chart paper: hairline plates, italic serif names, night-vision red.",
-  reticolo: "Visible construction grid, square cells, one cobalt plane.",
-};
-
 const FONT_LINK_ID = "stargate-skin-fonts";
 
 const FONT_HREF: Partial<Record<Skin, string>> = {

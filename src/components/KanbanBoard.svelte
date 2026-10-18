@@ -17,6 +17,7 @@
   import { autofocus } from "./actions";
   import { icon } from "./icons";
   import { todayISO } from "./format";
+  import { i18n } from "../i18n/state.svelte";
   import type { AddingKind, DragPayload } from "./dragTypes";
 
   let {
@@ -42,6 +43,8 @@
     renaming: { kind: "column" | "kanbanColumn"; id: string } | null;
     renameDraft: string;
   } = $props();
+
+  const t = $derived(i18n.t);
 
   let expandedTaskId: string | null = $state(null);
   let expandedColumnId: string | null = $state(null);
@@ -131,9 +134,9 @@
 
   function dueLabel(due: string): string {
     const status = dueStatus(due);
-    const date = new Date(`${due}T00:00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
-    if (status === "today") return "Today";
-    if (status === "overdue") return `Overdue · ${date}`;
+    const date = new Date(`${due}T00:00:00`).toLocaleDateString(t.locale, { month: "short", day: "numeric" });
+    if (status === "today") return t.kanban.today;
+    if (status === "overdue") return t.kanban.overdue(date);
     return date;
   }
 
@@ -158,7 +161,7 @@
   function onDeleteKanbanColumn(column: KanbanColumn) {
     if (!active) return;
     if (active.kanban.columns.length <= 1) return;
-    commitWithUndo(deleteKanbanColumn(doc, active.id, column.id), `Deleted column “${column.title}”`);
+    commitWithUndo(deleteKanbanColumn(doc, active.id, column.id), t.toast.deletedColumn(column.title));
   }
 
   function beginEditTitle(column: KanbanColumn, task: Task) {
@@ -241,7 +244,7 @@
       editingTaskId = null;
       editingColumnId = null;
     }
-    commitWithUndo(deleteTask(doc, active.id, column.id, task.id), `Deleted task “${task.title}”`);
+    commitWithUndo(deleteTask(doc, active.id, column.id, task.id), t.toast.deletedTask(task.title));
   }
 
   // ---------- drag & drop ----------
@@ -310,7 +313,7 @@
         class="kanban-col"
         class:drop-over={dropTarget === `kcol:${column.id}`}
         role="group"
-        aria-label={`${column.title} column`}
+        aria-label={t.board.columnLabel(column.title)}
         ondragover={(e) => kanbanColumnDragOver(e, column.id)}
         ondrop={(e) => dropOnKanbanColumn(e, column, columnIndex)}
       >
@@ -327,21 +330,21 @@
               bind:value={renameDraft}
               onkeydown={onRenameKeydown}
               onblur={commitRename}
-              aria-label="Column title"
+              aria-label={t.board.columnTitle}
               use:autofocus={true}
             />
           {:else}
             <button
               type="button"
               class="kanban-col-title"
-              title="Click to rename · drag to reorder"
+              title={t.board.renameHint}
               onclick={() => startRename("kanbanColumn", column.id, column.title)}
             >{column.title}</button>
           {/if}
           <span class="count">{column.tasks.length}</span>
           {#if active.kanban.columns.length > 1}
             <div class="hover-tools">
-              <button class="icon-btn danger" title="Delete column" onclick={() => onDeleteKanbanColumn(column)}>{@html icon("x")}</button>
+              <button class="icon-btn danger" title={t.board.deleteColumn} onclick={() => onDeleteKanbanColumn(column)}>{@html icon("x")}</button>
             </div>
           {/if}
         </header>
@@ -368,13 +371,13 @@
                     bind:value={titleDraft}
                     onkeydown={onTitleKeydown}
                     onblur={commitTitle}
-                    aria-label="Task title"
+                    aria-label={t.kanban.taskTitle}
                     use:autofocus
                   />
                 {:else}
-                  <button class="task-title" title="Click to edit" onclick={() => beginEditTitle(column, task)}>{task.title}</button>
+                  <button class="task-title" title={t.kanban.clickToEdit} onclick={() => beginEditTitle(column, task)}>{task.title}</button>
                 {/if}
-                <button class="icon-btn" title="Notes & due date" onclick={() => toggleEditor(column, task)}>{@html icon("pencil")}</button>
+                <button class="icon-btn" title={t.kanban.notesAndDue} onclick={() => toggleEditor(column, task)}>{@html icon("pencil")}</button>
               </div>
 
               {#if !open}
@@ -383,7 +386,7 @@
                     {#if task.notes.trim()}
                       {task.notes.split("\n")[0]}
                     {:else}
-                      <span class="muted">+ note</span>
+                      <span class="muted">{t.kanban.addNote}</span>
                     {/if}
                   </button>
                   {#if task.due}
@@ -398,24 +401,24 @@
                   <textarea
                     bind:value={notesDraft}
                     onblur={commitNotes}
-                    placeholder="Notes…"
+                    placeholder={t.kanban.notesPlaceholder}
                     rows={3}
-                    aria-label="Notes"
+                    aria-label={t.kanban.notes}
                     use:autofocus
                   ></textarea>
                   <div class="editor-row">
                     <label class="due-field">
                       {@html icon("cal")}
-                      <span>Due</span>
+                      <span>{t.kanban.due}</span>
                       <input type="date" bind:value={dueDraft} onchange={onDueChange} />
                     </label>
                     {#if task.due}
-                      <button class="btn sm ghost" onclick={clearDue}>Clear</button>
+                      <button class="btn sm ghost" onclick={clearDue}>{t.kanban.clear}</button>
                     {/if}
                   </div>
                   <div class="editor-row">
-                    <button class="btn sm danger" onclick={() => onDeleteTask(column, task)}>{@html icon("trash")} Delete task</button>
-                    <button class="btn sm push" onclick={() => toggleEditor(column, task)}>Done</button>
+                    <button class="btn sm danger" onclick={() => onDeleteTask(column, task)}>{@html icon("trash")} {t.kanban.deleteTask}</button>
+                    <button class="btn sm push" onclick={() => toggleEditor(column, task)}>{t.kanban.done}</button>
                   </div>
                 </div>
               {/if}
@@ -427,16 +430,16 @@
           <form class="add-form" onsubmit={(e) => onAddTask(e, column)}>
             <input
               class="inline-input"
-              placeholder="Task title"
-              aria-label="New task"
+              placeholder={t.kanban.taskTitle}
+              aria-label={t.kanban.newTask}
               onblur={onAddBlur}
               onkeydown={onAddKeydown}
               use:autofocus
             />
-            <button class="icon-btn" type="submit" title="Add task">{@html icon("plus")}</button>
+            <button class="icon-btn" type="submit" title={t.kanban.addTask}>{@html icon("plus")}</button>
           </form>
         {:else}
-          <button class="ghost-add" onclick={() => startAdding("task", column.id)}>{@html icon("plus")} Add task</button>
+          <button class="ghost-add" onclick={() => startAdding("task", column.id)}>{@html icon("plus")} {t.kanban.addTask}</button>
         {/if}
       </section>
     {/each}
@@ -446,17 +449,17 @@
         <form class="add-form" onsubmit={onAddKanbanColumn}>
           <input
             class="inline-input"
-            placeholder="Column title"
-            aria-label="New column"
+            placeholder={t.board.columnTitle}
+            aria-label={t.board.newColumn}
             onblur={onAddBlur}
             onkeydown={onAddKeydown}
             use:autofocus
           />
-          <button class="icon-btn" type="submit" title="Add column">{@html icon("plus")}</button>
+          <button class="icon-btn" type="submit" title={t.board.addColumn}>{@html icon("plus")}</button>
         </form>
       </div>
     {:else}
-      <button class="add-tile kanban-add-tile" onclick={() => startAdding("kanbanColumn", active.id)}>{@html icon("plus")}<span>New column</span></button>
+      <button class="add-tile kanban-add-tile" onclick={() => startAdding("kanbanColumn", active.id)}>{@html icon("plus")}<span>{t.board.newColumn}</span></button>
     {/if}
   </div>
 {/if}

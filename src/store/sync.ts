@@ -7,6 +7,8 @@ export const SYNC_META_KEY = "stargate.v1.sync";
 export const PUSH_DEBOUNCE_MS = 1500;
 /** How many times a conflicting push re-fetches and retries before giving up. */
 export const MAX_PUSH_ATTEMPTS = 3;
+/** Status detail when pushes keep conflicting; the UI shows a translated text in its place. */
+export const SYNC_CONFLICT_MESSAGE = "Another device keeps changing your data; will retry.";
 
 /** The synced row as the server holds it. */
 export interface RemoteRow {
@@ -221,7 +223,7 @@ export class SyncEngine {
         }
         // Conflict: someone else pushed in between — re-fetch and decide again.
       }
-      this.opts.onStatus("error", "Another device keeps changing your data; will retry.");
+      this.opts.onStatus("error", SYNC_CONFLICT_MESSAGE);
     } catch (err) {
       const offline = typeof navigator !== "undefined" && navigator.onLine === false;
       this.opts.onStatus(offline ? "offline" : "error", err instanceof Error ? err.message : String(err));

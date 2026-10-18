@@ -6,18 +6,8 @@ export function bareUrl(url: string): string {
 }
 
 export const LINK_STYLE_OPTIONS: LinkStyle[] = ["list", "detail", "tiles"];
-export const LINK_STYLE_LABEL: Record<LinkStyle, string> = {
-  list: "List",
-  detail: "Detail",
-  tiles: "Tiles",
-};
 
 export const FAVICON_SIZE_OPTIONS: FaviconSize[] = ["sm", "md", "lg"];
-export const FAVICON_SIZE_LABEL: Record<FaviconSize, string> = {
-  sm: "Small 16",
-  md: "Medium 24",
-  lg: "Large 32",
-};
 export const FAVICON_SIZE_PX: Record<FaviconSize, number> = {
   sm: 16,
   md: 24,

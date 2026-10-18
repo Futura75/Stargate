@@ -38,9 +38,9 @@ describe("opening the settings panel and changing a setting", () => {
     const props = baseProps(doc);
     render(SettingsPanel, { props });
 
-    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Impostazioni" })).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: /Dark/ }));
+    await fireEvent.click(screen.getByRole("button", { name: /Scuro/ }));
 
     expect(props.commit).toHaveBeenCalledTimes(1);
     const next = props.commit.mock.calls[0][0] as StargateState;
@@ -52,7 +52,7 @@ describe("opening the settings panel and changing a setting", () => {
     const props = { ...baseProps(doc), open: false };
     render(SettingsPanel, { props });
 
-    expect(screen.queryByRole("dialog", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Impostazioni" })).not.toBeInTheDocument();
   });
 
   it("calls onclose when the close button is clicked", async () => {
@@ -60,7 +60,7 @@ describe("opening the settings panel and changing a setting", () => {
     const props = baseProps(doc);
     render(SettingsPanel, { props });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Chiudi" }));
     expect(props.onclose).toHaveBeenCalledTimes(1);
   });
 });

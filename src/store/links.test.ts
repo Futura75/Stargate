@@ -37,7 +37,7 @@ interface Fixture {
 
 /**
  * Builds a deterministic-shaped state:
- * - ws1 "Personal": colA "Getting started" [ blkA "Welcome" [link1, link2, link3], blkB "Block B" [] ], colB "Col B" []
+ * - ws1 "Personale": colA "Per iniziare" [ blkA "Benvenuto" [link1, link2, link3], blkB "Block B" [] ], colB "Col B" []
  * - ws2 "Work": no columns
  */
 function fixture(): Fixture {
@@ -70,13 +70,13 @@ describe("workspace mutations", () => {
     const next = updateWorkspace(f.s, f.ws1, { icon: "🎯", color: "#112233" });
     expect(next.workspaces[0].icon).toBe("🎯");
     expect(next.workspaces[0].color).toBe("#112233");
-    expect(next.workspaces[0].name).toBe("Personal");
+    expect(next.workspaces[0].name).toBe("Personale");
   });
 
   it("deletes a workspace when more than one remains", () => {
     const f = fixture();
     const next = deleteWorkspace(f.s, f.ws2);
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale"]);
   });
 
   it("refuses to delete the last workspace", () => {
@@ -138,7 +138,7 @@ describe("reorder", () => {
   it("reorders columns positionally", () => {
     const f = fixture();
     const next = reorderColumn(f.s, f.ws1, f.colB, 0);
-    expect(next.workspaces[0].columns.map((c) => c.title)).toEqual(["Col B", "Getting started"]);
+    expect(next.workspaces[0].columns.map((c) => c.title)).toEqual(["Col B", "Per iniziare"]);
   });
 
   it("reorders blocks within a column", () => {
@@ -146,7 +146,7 @@ describe("reorder", () => {
     const next = reorderBlock(f.s, f.ws1, f.colA, f.blkB, 0);
     expect(next.workspaces[0].columns[0].blocks.map((b) => b.title)).toEqual([
       "Block B",
-      "Welcome",
+      "Benvenuto",
     ]);
   });
 
@@ -165,7 +165,7 @@ describe("move", () => {
   it("moves a block across columns", () => {
     const f = fixture();
     const next = moveBlock(f.s, f.ws1, f.colA, f.colB, f.blkB, 0);
-    expect(next.workspaces[0].columns[0].blocks.map((b) => b.title)).toEqual(["Welcome"]);
+    expect(next.workspaces[0].columns[0].blocks.map((b) => b.title)).toEqual(["Benvenuto"]);
     expect(next.workspaces[0].columns[1].blocks.map((b) => b.title)).toEqual(["Block B"]);
   });
 
@@ -179,7 +179,7 @@ describe("move", () => {
       "Block B",
       "Y",
     ]);
-    expect(next.workspaces[0].columns[0].blocks.map((b) => b.title)).toEqual(["Welcome"]);
+    expect(next.workspaces[0].columns[0].blocks.map((b) => b.title)).toEqual(["Benvenuto"]);
   });
 
   it("moves a link between blocks", () => {

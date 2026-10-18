@@ -2,12 +2,13 @@
    threshold; splitting it up is pre-existing debt tracked under the
    code-health follow-ups in #45, not attempted as part of this
    lint-tooling issue (#51). */
-import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Link, LinkStyle, SearchEngine, Settings, Skin, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
+import { DEFAULT_LANGUAGE, isLanguage, messagesFor } from "../i18n";
+import { StargateError } from "./errors";
+import type { Background, Block, BlockTitleSize, Column, Favicon, FaviconSize, FaviconSource, KanbanColumn, Language, Link, LinkStyle, SearchEngine, Settings, Skin, StargateState, Theme, Workspace, WorkspaceLayout } from "./types";
 
 export const SCHEMA_VERSION = "4" as const;
 export const APP_NAME = "Stargate" as const;
 export const APP_VERSION = "0.1.0" as const;
-export const DEFAULT_KANBAN_TITLES = ["Todo", "In Progress", "Done"] as const;
 export const MAX_FAVICON_BASE64 = 8192;
 /** Absolute per-background cap (~500 KB target): base64 data-URL length in characters. */
 export const MAX_BACKGROUND_BASE64 = 700 * 1024;
@@ -88,11 +89,20 @@ export function parseLinkInput(input: string): { title: string; url: string } {
   return { title: rest || domainOf(url), url };
 }
 
-export function defaultKanbanColumns(): KanbanColumn[] {
-  return DEFAULT_KANBAN_TITLES.map((title) => ({ id: newId(), title, tasks: [] }));
+/** Effective UI language: the explicit setting, else the default (files from older versions have none). */
+export function languageOf(settings: Pick<Settings, "language">): Language {
+  return isLanguage(settings.language) ? settings.language : DEFAULT_LANGUAGE;
 }
 
-export function newWorkspace(input: { name: string; icon: string; color: string }): Workspace {
+export function defaultKanbanColumns(language: Language = DEFAULT_LANGUAGE): KanbanColumn[] {
+  return messagesFor(language).seed.kanban.map((title) => ({ id: newId(), title, tasks: [] }));
+}
+
+/** A new empty workspace; its default kanban column titles are in `language`. */
+export function newWorkspace(
+  input: { name: string; icon: string; color: string },
+  language: Language = DEFAULT_LANGUAGE,
+): Workspace {
   return {
     id: newId(),
     name: input.name,
@@ -100,7 +110,7 @@ export function newWorkspace(input: { name: string; icon: string; color: string 
     color: input.color,
     background: { dataUrl: null, alpha: 70 },
     columns: [],
-    kanban: { columns: defaultKanbanColumns() },
+    kanban: { columns: defaultKanbanColumns(language) },
   };
 }
 
@@ -108,7 +118,7 @@ export function addWorkspace(
   state: StargateState,
   input: { name: string; icon: string; color: string },
 ): StargateState {
-  return { ...state, workspaces: [...state.workspaces, newWorkspace(input)] };
+  return { ...state, workspaces: [...state.workspaces, newWorkspace(input, languageOf(state.settings))] };
 }
 
 export function setSearchEngine(state: StargateState, engine: SearchEngine): StargateState {
@@ -125,6 +135,10 @@ export function setSkin(state: StargateState, skin: Skin): StargateState {
 
 export function setFaviconSource(state: StargateState, source: FaviconSource): StargateState {
   return { ...state, settings: { ...state.settings, faviconSource: source } };
+}
+
+export function setLanguage(state: StargateState, language: Language): StargateState {
+  return { ...state, settings: { ...state.settings, language } };
 }
 
 export function setOpenWorkspace(state: StargateState, mode: NonNullable<Settings["openWorkspace"]>): StargateState {
@@ -811,7 +825,8 @@ export function moveTask(
   return mapWorkspace(state, workspaceId, { kanban: { ...workspace.kanban, columns } }) ?? state;
 }
 
-export function createDefaultState(now = new Date().toISOString()): StargateState {
+export function createDefaultState(now = new Date().toISOString(), language: Language = DEFAULT_LANGUAGE): StargateState {
+  const seed = messagesFor(language).seed;
   let state: StargateState = {
     schemaVersion: SCHEMA_VERSION,
     app: { name: APP_NAME, version: APP_VERSION },
@@ -823,17 +838,18 @@ export function createDefaultState(now = new Date().toISOString()): StargateStat
       theme: "system",
       searchEngine: "google",
       faviconSource: "google-s2",
+      language,
       openWorkspace: DEFAULT_OPEN_WORKSPACE,
     },
     workspaces: [],
   };
-  state = addWorkspace(state, { name: "Personal", icon: "🏠", color: "#5f7161" });
+  state = addWorkspace(state, { name: seed.workspace, icon: "🏠", color: "#5f7161" });
   const wsId = state.workspaces[0].id;
-  state = addColumn(state, wsId, "Getting started");
+  state = addColumn(state, wsId, seed.column);
   const colId = state.workspaces[0].columns[0].id;
-  state = addBlock(state, wsId, colId, "Welcome");
+  state = addBlock(state, wsId, colId, seed.block);
   const blkId = state.workspaces[0].columns[0].blocks[0].id;
-  state = addLink(state, wsId, colId, blkId, "https://github.com/Futura75/Stargate Stargate repo");
+  state = addLink(state, wsId, colId, blkId, `https://github.com/Futura75/Stargate ${seed.link}`);
   return state;
 }
 
@@ -844,7 +860,7 @@ export function serialize(state: StargateState): string {
 export function deserialize(json: string): StargateState {
   const parsed: unknown = JSON.parse(json);
   if (!isState(parsed)) {
-    throw new Error(`Invalid Stargate state: expected schemaVersion "${SCHEMA_VERSION}" with a workspaces array`);
+    throw new StargateError("invalid-state", `Invalid Stargate state: expected schemaVersion "${SCHEMA_VERSION}" with a workspaces array`);
   }
   return sanitizeState(parsed);
 }
@@ -859,17 +875,17 @@ export function importState(json: string): StargateState {
     parsed = JSON.parse(json);
   } catch (err) {
     console.error(err);
-    throw new Error("not a valid JSON file", { cause: err });
+    throw new StargateError("invalid-json", "not a valid JSON file", { cause: err });
   }
   if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("missing schemaVersion");
+    throw new StargateError("missing-schema", "missing schemaVersion");
   }
   const raw = parsed as Record<string, unknown>;
   if (typeof raw.schemaVersion !== "string") {
-    throw new Error("missing schemaVersion");
+    throw new StargateError("missing-schema", "missing schemaVersion");
   }
   if (compareVersion(raw.schemaVersion, SCHEMA_VERSION) > 0) {
-    throw new Error("made by a newer version of Stargate");
+    throw new StargateError("newer-version", "made by a newer version of Stargate");
   }
   // `raw.schemaVersion` is validated as a string above, and migrate() itself
   // throws at runtime for any version it doesn't know how to step from. This
@@ -1039,7 +1055,7 @@ function migrate(state: AnyVersionedState): AnyVersionedState {
         current = migrateV3toV4(current);
         break;
       default:
-        throw new Error(`cannot migrate from version ${unreachableVersion}`);
+        throw new StargateError("cannot-migrate", `cannot migrate from version ${unreachableVersion}`);
     }
   }
   return current;
@@ -1080,6 +1096,7 @@ function sanitizeState(state: StargateState): StargateState {
 function sanitizeSettings(settings: Settings): Settings {
   const sanitized: Settings = { ...settings };
   if (!isOpenWorkspace(settings.openWorkspace)) delete sanitized.openWorkspace;
+  if (!isLanguage(settings.language)) delete sanitized.language;
   if (typeof settings.lastWorkspaceId !== "string") delete sanitized.lastWorkspaceId;
   if (!SKINS.includes(settings.skin as Skin)) delete sanitized.skin;
   return sanitized;

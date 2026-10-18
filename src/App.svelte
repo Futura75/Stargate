@@ -17,6 +17,7 @@
     resolveActiveWorkspace,
     setBackground,
     setBackgroundAlpha,
+    languageOf,
     setLastWorkspaceId,
     setOpenWorkspace,
     setSearchEngine,
@@ -27,9 +28,11 @@
     MAX_BACKGROUND_BASE64,
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
+  import { errorText, i18n } from "./i18n/state.svelte";
   import { browserCodec } from "./store/codec";
+  import { StargateError } from "./store/errors";
   import { loadState, meterState, saveState } from "./store/persistence";
-  import { SyncEngine, type SyncStatus } from "./store/sync";
+  import { SYNC_CONFLICT_MESSAGE, SyncEngine, type SyncStatus } from "./store/sync";
   import { signIn, signOut, supabaseRemote, syncConfigured, watchSession, type OAuthProvider } from "./sync/supabase";
   import type {
     BlockTitleSize,
@@ -58,6 +61,13 @@
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
 
+  // The document's language drives the shared i18n state every component reads.
+  i18n.language = languageOf(loaded.state.settings);
+  $effect.pre(() => {
+    i18n.language = languageOf(doc.settings);
+  });
+  const t = $derived(i18n.t);
+
   let drag: DragPayload | null = $state(null);
   let dropTarget: string | null = $state(null);
   let view: "links" | "kanban" = $state("links");
@@ -84,11 +94,6 @@
   let bookmarksImportFlowRef: BookmarksImportFlow | undefined = $state();
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
-  const THEME_LABEL: Record<Theme, string> = {
-    light: "Light",
-    dark: "Dark",
-    system: "System",
-  };
   const THEME_ICON: Record<Theme, string> = {
     light: "sun",
     dark: "moon",
@@ -135,7 +140,13 @@
     document.body.style.setProperty("--ws", active?.color ?? "#5f7161");
   });
 
-  const todayLabel = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
+  $effect(() => {
+    document.documentElement.lang = t.locale;
+  });
+
+  const todayLabel = $derived(
+    new Date().toLocaleDateString(t.locale, { weekday: "long", month: "long", day: "numeric" }),
+  );
 
   function commit(next: StargateState): boolean {
     try {
@@ -147,7 +158,7 @@
       return true;
     } catch (err) {
       pendingSave = next;
-      storageError = err instanceof Error ? err.message : "Could not save your changes.";
+      storageError = errorText(err, t.errors.saveFailed);
       return false;
     }
   }
@@ -170,7 +181,7 @@
     }
     doc = next;
     if (!doc.workspaces.some((w) => w.id === activeId)) activeId = resolveActiveWorkspace(doc)?.id ?? "";
-    if (firstLink) showToast("Loaded the data synced to your account.", previous);
+    if (firstLink) showToast(t.toast.syncLoaded, previous);
   }
 
   function startSync(userId: string) {
@@ -184,7 +195,7 @@
       onRemoteState: applyRemoteState,
       onStatus: (status, message) => {
         syncStatus = status;
-        syncMessage = message ?? null;
+        syncMessage = message === SYNC_CONFLICT_MESSAGE ? t.syncConflict : (message ?? null);
       },
     });
     void syncEngine.start();
@@ -230,7 +241,7 @@
     try {
       await signIn(provider);
     } catch (err) {
-      showToast(err instanceof Error ? `Sign-in failed: ${err.message}` : "Sign-in failed.");
+      showToast(t.toast.signInFailed(err instanceof Error ? err.message : undefined));
     }
   }
 
@@ -238,7 +249,7 @@
     try {
       await signOut();
     } catch (err) {
-      showToast(err instanceof Error ? `Sign-out failed: ${err.message}` : "Sign-out failed.");
+      showToast(t.toast.signOutFailed(err instanceof Error ? err.message : undefined));
     }
   }
 
@@ -289,10 +300,10 @@
         storageError = null;
       } catch (err) {
         pendingSave = next;
-        storageError = err instanceof Error ? err.message : "Could not save your changes.";
+        storageError = errorText(err, t.errors.saveFailed);
       }
     } catch (err) {
-      storageError = err instanceof Error ? err.message : "Could not re-compress the background image.";
+      storageError = errorText(err, t.errors.recompressFailed);
     } finally {
       recompressing = false;
     }
@@ -324,7 +335,7 @@
   // ---------- search, suggestions & quick actions ----------
 
   type Result = {
-    group: "Web" | "Links" | "Actions";
+    group: "web" | "links" | "actions";
     label: string;
     sub?: string;
     icon?: string;
@@ -343,9 +354,9 @@
     if (q) {
       const raw = query.trim();
       out.push({
-        group: "Web",
+        group: "web",
         icon: "globe",
-        label: `Search ${ENGINE_LABEL[doc.settings.searchEngine]} for “${raw}”`,
+        label: t.search.webFor(ENGINE_LABEL[doc.settings.searchEngine], raw),
         run: () => openUrl(engineUrl(doc.settings.searchEngine, raw)),
       });
     }
@@ -355,7 +366,7 @@
         for (const b of c.blocks) {
           for (const l of b.links) {
             if (!q || `${l.title} ${l.url}`.toLowerCase().includes(q)) {
-              links.push({ group: "Links", link: l, label: l.title, sub: `${w.icon} ${b.title}`, run: () => openUrl(l.url) });
+              links.push({ group: "links", link: l, label: l.title, sub: `${w.icon} ${b.title}`, run: () => openUrl(l.url) });
             }
           }
         }
@@ -365,20 +376,20 @@
     if (withActions) {
       const actions: Result[] = [
         ...doc.workspaces.map((w, i) => ({
-          group: "Actions" as const,
+          group: "actions" as const,
           icon: "chevR",
-          label: `Go to ${w.icon} ${w.name}`,
+          label: t.actions.goTo(`${w.icon} ${w.name}`),
           kbd: i < 9 ? `Alt ${i + 1}` : undefined,
           run: () => selectWorkspace(w.id),
         })),
-        { group: "Actions", icon: "grid", label: "Show links", run: () => setView("links") },
-        { group: "Actions", icon: "board", label: "Show kanban", run: () => setView("kanban") },
-        { group: "Actions", icon: "plus", label: "New workspace", run: createWorkspace },
-        { group: "Actions", icon: "pencil", label: "Edit this workspace", run: () => (sheet = "workspace") },
-        { group: "Actions", icon: "moon", label: "Switch theme", run: cycleTheme },
-        { group: "Actions", icon: "sliders", label: "Open settings", run: () => (sheet = "settings") },
-        { group: "Actions", icon: "download", label: "Export backup", run: onExport },
-        { group: "Actions", icon: "folder", label: "Import browser bookmarks", run: onImportBookmarks },
+        { group: "actions", icon: "grid", label: t.actions.showLinks, run: () => setView("links") },
+        { group: "actions", icon: "board", label: t.actions.showKanban, run: () => setView("kanban") },
+        { group: "actions", icon: "plus", label: t.actions.newWorkspace, run: createWorkspace },
+        { group: "actions", icon: "pencil", label: t.actions.editWorkspace, run: () => (sheet = "workspace") },
+        { group: "actions", icon: "moon", label: t.actions.switchTheme, run: cycleTheme },
+        { group: "actions", icon: "sliders", label: t.actions.openSettings, run: () => (sheet = "settings") },
+        { group: "actions", icon: "download", label: t.actions.exportBackup, run: onExport },
+        { group: "actions", icon: "folder", label: t.actions.importBookmarks, run: onImportBookmarks },
       ];
       out.push(...actions.filter((a) => !q || a.label.toLowerCase().includes(q)));
     }
@@ -504,13 +515,13 @@
         try {
           const compressed = await browserCodec.compressImage(dataUrl);
           commit(setBackground(doc, wsId, { dataUrl: compressed, alpha }));
-          showToast(`Background set (${formatBytes(compressed.length)})`);
+          showToast(t.toast.backgroundSet(formatBytes(compressed.length)));
         } catch (err) {
           const limit = Math.round(MAX_BACKGROUND_BASE64 / 1024);
           const message =
-            err instanceof Error && err.message.includes("too large")
-              ? err.message
-              : `That image couldn't be used as a background (max ${limit} KB after compression).`;
+            err instanceof StargateError && err.code === "background-too-large"
+              ? t.errors[err.code]
+              : t.errors.backgroundUnusable(limit);
           showToast(message);
         }
       };
@@ -529,7 +540,7 @@
   function onRemoveBackground() {
     const wsId = active?.id;
     if (!wsId) return;
-    commitWithUndo(removeBackground(doc, wsId), "Background removed");
+    commitWithUndo(removeBackground(doc, wsId), t.toast.backgroundRemoved);
   }
 
   // ---------- layout settings ----------
@@ -615,18 +626,18 @@
         try {
           imported = importState(text);
         } catch (err) {
-          showToast(err instanceof Error ? err.message : "Could not import this file.");
+          showToast(errorText(err, t.errors.importFailed));
           return;
         }
         confirmDialog = {
-          title: "Replace all your data?",
-          text: `This file has ${imported.workspaces.length} ${imported.workspaces.length === 1 ? "workspace" : "workspaces"}. They will replace everything you have now. Export a backup first if you might want it back.`,
-          ok: "Replace",
+          title: t.confirmImport.title,
+          text: t.confirmImport.text(imported.workspaces.length),
+          ok: t.confirmImport.ok,
           run: () => {
             sheet = null;
             activeId = resolveActiveWorkspace(imported)?.id ?? "";
             commit(imported);
-            showToast("Data restored from file");
+            showToast(t.toast.dataRestored);
           },
         };
       };
@@ -649,7 +660,7 @@
   function createWorkspace() {
     const n = doc.workspaces.length;
     const next = addWorkspace(doc, {
-      name: "New workspace",
+      name: t.seed.newWorkspace,
       icon: WORKSPACE_ICONS[n % WORKSPACE_ICONS.length],
       color: WORKSPACE_COLORS[n % WORKSPACE_COLORS.length],
     });
@@ -677,7 +688,7 @@
     if (next === doc) return;
     sheet = null;
     if (activeId === ws.id) activeId = next.workspaces[0]?.id ?? "";
-    commitWithUndo(next, `Deleted workspace “${ws.name}”`);
+    commitWithUndo(next, t.toast.deletedWorkspace(ws.name));
   }
 
   // ---------- workspace drag & drop (dock) ----------
@@ -735,11 +746,11 @@
 {#snippet resultList(list: Result[], selected: number, onpick: (r: Result) => void)}
   {#each list as r, i (i)}
     {#if i === 0 || list[i - 1].group !== r.group}
-      <div class="result-group">{r.group}</div>
+      <div class="result-group">{t.search.groups[r.group]}</div>
     {/if}
     {@render resultRow(r, i === selected, () => onpick(r))}
   {:else}
-    <div class="result-group">No matches</div>
+    <div class="result-group">{t.search.noMatches}</div>
   {/each}
 {/snippet}
 
@@ -770,15 +781,15 @@
           onkeydown={onSearchKeydown}
           onfocus={() => (searchFocused = true)}
           onblur={() => (searchFocused = false)}
-          placeholder="Search the web or your links"
-          aria-label="Search"
+          placeholder={t.search.placeholder}
+          aria-label={t.search.label}
           autocomplete="off"
           type="search"
           inputmode="search"
           enterkeyhint="search"
         />
         <select
-          aria-label="Search engine"
+          aria-label={t.search.engineLabel}
           value={doc.settings.searchEngine}
           onchange={(e) => commit(setSearchEngine(doc, (e.currentTarget as HTMLSelectElement).value as SearchEngine))}
         >
@@ -793,14 +804,14 @@
         {/if}
       </form>
       <div class="hero-meta">
-        <span>{@html icon("link")} {linkCount(active)} links</span>
-        <span>{@html icon("board")} {openTaskCount(active)} open tasks</span>
+        <span>{@html icon("link")} {t.hero.links(linkCount(active))}</span>
+        <span>{@html icon("board")} {t.hero.openTasks(openTaskCount(active))}</span>
         {#if dueOrOverdueCount(active) > 0}
           <button class="due-alert" onclick={() => setView("kanban")}>
-            {@html icon("cal")} {dueOrOverdueCount(active)} due or overdue
+            {@html icon("cal")} {t.hero.dueOrOverdue(dueOrOverdueCount(active))}
           </button>
         {/if}
-        <span class="hint-keys"><kbd>/</kbd> search · <kbd>{MOD_KEY} K</kbd> quick actions</span>
+        <span class="hint-keys"><kbd>/</kbd> {t.hero.hintSearch} · <kbd>{MOD_KEY} K</kbd> {t.hero.hintActions}</span>
       </div>
     </header>
   {/if}
@@ -813,18 +824,18 @@
           <span class="notice-msg">{storageError}</span>
           {#if canRecompress}
             <button class="btn sm" onclick={onRecompress} disabled={recompressing}>
-              {recompressing ? "Re-compressing…" : "Re-compress backgrounds"}
+              {recompressing ? t.notices.recompressing : t.notices.recompress}
             </button>
           {/if}
-          <button class="btn sm" onclick={onExport}>{@html icon("download")} Export</button>
-          <button class="icon-btn" aria-label="Dismiss" onclick={() => (storageError = null)}>{@html icon("x")}</button>
+          <button class="btn sm" onclick={onExport}>{@html icon("download")} {t.notices.export}</button>
+          <button class="icon-btn" aria-label={t.notices.dismiss} onclick={() => (storageError = null)}>{@html icon("x")}</button>
         </div>
       {/if}
       {#if recovered}
         <div class="notice info" role="status">
           {@html icon("undo")}
-          <span class="notice-msg">Your data was recovered from a backup. Re-add any background images.</span>
-          <button class="icon-btn" aria-label="Dismiss" onclick={() => (recovered = false)}>{@html icon("x")}</button>
+          <span class="notice-msg">{t.notices.recovered}</span>
+          <button class="icon-btn" aria-label={t.notices.dismiss} onclick={() => (recovered = false)}>{@html icon("x")}</button>
         </div>
       {/if}
     </div>
@@ -863,7 +874,7 @@
   </main>
 </div>
 
-<nav class="dock" aria-label="Workspaces and tools">
+<nav class="dock" aria-label={t.dock.label}>
   {#each doc.workspaces as ws, wsIndex (ws.id)}
     <button
       class="dock-ws"
@@ -887,18 +898,18 @@
       <span class="dock-tip">{ws.name}{wsIndex < 9 ? ` · Alt ${wsIndex + 1}` : ""}</span>
     </button>
   {/each}
-  <button class="dock-ws dock-add" title="New workspace" onclick={createWorkspace}>{@html icon("plus")}</button>
+  <button class="dock-ws dock-add" title={t.dock.newWorkspace} onclick={createWorkspace}>{@html icon("plus")}</button>
   <span class="dock-sep"></span>
-  <button class="dock-btn" class:active={view === "links"} title="Links" aria-pressed={view === "links"} onclick={() => setView("links")}>{@html icon("grid")}</button>
-  <button class="dock-btn" class:active={view === "kanban"} title="Kanban" aria-pressed={view === "kanban"} onclick={() => setView("kanban")}>
+  <button class="dock-btn" class:active={view === "links"} title={t.dock.links} aria-pressed={view === "links"} onclick={() => setView("links")}>{@html icon("grid")}</button>
+  <button class="dock-btn" class:active={view === "kanban"} title={t.dock.kanban} aria-pressed={view === "kanban"} onclick={() => setView("kanban")}>
     {@html icon("board")}
     {#if active && openTaskCount(active) > 0}<span class="dock-badge">{openTaskCount(active)}</span>{/if}
   </button>
   <span class="dock-sep"></span>
-  <button class="dock-btn" title="Workspace settings" onclick={() => (sheet = "workspace")}>{@html icon("pencil")}</button>
-  <button class="dock-btn" title={`Quick actions (${MOD_KEY} K)`} onclick={openPalette}>{@html icon("command")}</button>
-  <button class="dock-btn" title={`Theme: ${THEME_LABEL[doc.settings.theme]}`} onclick={cycleTheme}>{@html icon(THEME_ICON[doc.settings.theme])}</button>
-  <button class="dock-btn" title="Settings" onclick={() => (sheet = "settings")}>{@html icon("sliders")}</button>
+  <button class="dock-btn" title={t.dock.workspaceSettings} onclick={() => (sheet = "workspace")}>{@html icon("pencil")}</button>
+  <button class="dock-btn" title={t.dock.quickActions(`${MOD_KEY} K`)} onclick={openPalette}>{@html icon("command")}</button>
+  <button class="dock-btn" title={t.dock.theme(t.theme[doc.settings.theme])} onclick={cycleTheme}>{@html icon(THEME_ICON[doc.settings.theme])}</button>
+  <button class="dock-btn" title={t.dock.settings} onclick={() => (sheet = "settings")}>{@html icon("sliders")}</button>
 </nav>
 
 <SettingsPanel
@@ -934,25 +945,25 @@
 
 {#if sheet === "workspace" && active}
   <div class="scrim sheet-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (sheet = null)}>
-    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label="Workspace" tabindex="-1">
+    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label={t.workspace.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Workspace</h2>
-        <button class="icon-btn" aria-label="Close" onclick={() => (sheet = null)}>{@html icon("x")}</button>
+        <h2>{t.workspace.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={() => (sheet = null)}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         <label class="field">
-          <span class="setting-label">Name</span>
+          <span class="setting-label">{t.workspace.name}</span>
           {#key active.id}
             <input
               value={active.name}
               onchange={onWorkspaceName}
               onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-              use:autofocus={active.name === "New workspace"}
+              use:autofocus={active.name === t.seed.newWorkspace}
             />
           {/key}
         </label>
         <div class="field">
-          <span class="setting-label">Icon</span>
+          <span class="setting-label">{t.workspace.icon}</span>
           <div class="emoji-grid">
             {#each WORKSPACE_ICONS as emoji (emoji)}
               <button type="button" class:sel={active.icon === emoji} onclick={() => onWorkspaceAppearance({ icon: emoji })}>{emoji}</button>
@@ -960,7 +971,7 @@
           </div>
         </div>
         <div class="field">
-          <span class="setting-label">Colour</span>
+          <span class="setting-label">{t.workspace.colour}</span>
           <div class="swatches">
             {#each WORKSPACE_COLORS as color (color)}
               <button
@@ -975,26 +986,26 @@
             <input
               type="color"
               value={active.color}
-              aria-label="Custom colour"
+              aria-label={t.workspace.customColour}
               onchange={(e) => onWorkspaceAppearance({ color: (e.currentTarget as HTMLInputElement).value })}
             />
           </div>
         </div>
         <div class="field">
-          <span class="setting-label">Background</span>
+          <span class="setting-label">{t.workspace.background}</span>
           <div class="bg-preview" style:background-image={active.background.dataUrl ? `url(${active.background.dataUrl})` : undefined}>
-            {#if !active.background.dataUrl}No background image{/if}
+            {#if !active.background.dataUrl}{t.workspace.noBackground}{/if}
           </div>
           <div class="editor-row">
             <button class="btn sm" onclick={onUploadBackground}>
-              {@html icon("image")} {active.background.dataUrl ? "Replace image" : "Upload image"}
+              {@html icon("image")} {active.background.dataUrl ? t.workspace.replaceImage : t.workspace.uploadImage}
             </button>
             {#if active.background.dataUrl}
-              <button class="btn sm danger" onclick={onRemoveBackground}>Remove</button>
+              <button class="btn sm danger" onclick={onRemoveBackground}>{t.common.remove}</button>
             {/if}
           </div>
           <span class="range-row">
-            <span class="help-note">Strength</span>
+            <span class="help-note">{t.workspace.strength}</span>
             <input
               type="range"
               min="0"
@@ -1003,18 +1014,18 @@
               value={active.background.alpha}
               oninput={onBackgroundAlpha}
               disabled={!active.background.dataUrl}
-              aria-label="Background strength"
+              aria-label={t.workspace.backgroundStrength}
             />
             <output>{active.background.alpha}%</output>
           </span>
-          <p class="help-note">Images are compressed in your browser to about 500 KB.</p>
+          <p class="help-note">{t.workspace.compressionNote}</p>
         </div>
       </div>
       <div class="dialog-foot">
         {#if doc.workspaces.length > 1}
-          <button class="btn danger push-right" onclick={() => onDeleteWorkspace(active)}>{@html icon("trash")} Delete workspace</button>
+          <button class="btn danger push-right" onclick={() => onDeleteWorkspace(active)}>{@html icon("trash")} {t.workspace.delete}</button>
         {/if}
-        <button class="btn primary" onclick={() => (sheet = null)}>Done</button>
+        <button class="btn primary" onclick={() => (sheet = null)}>{t.common.done}</button>
       </div>
     </div>
   </div>
@@ -1027,7 +1038,7 @@
       <div class="dialog-head"><h2>{dialog.title}</h2></div>
       <div class="dialog-body"><p class="dialog-text">{dialog.text}</p></div>
       <div class="dialog-foot">
-        <button type="button" class="btn ghost" onclick={() => (confirmDialog = null)}>Cancel</button>
+        <button type="button" class="btn ghost" onclick={() => (confirmDialog = null)}>{t.common.cancel}</button>
         <button
           type="button"
           class="btn primary"
@@ -1043,15 +1054,15 @@
 
 {#if paletteOpen}
   <div class="scrim palette-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && closePalette()}>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Quick actions">
+    <div class="palette" role="dialog" aria-modal="true" aria-label={t.palette.label}>
       <div class="palette-input">
         {@html icon("search")}
         <input
           bind:value={paletteQuery}
           oninput={() => (paletteSel = 0)}
           onkeydown={onPaletteKeydown}
-          placeholder="Search links, workspaces, actions or the web"
-          aria-label="Quick actions"
+          placeholder={t.palette.placeholder}
+          aria-label={t.palette.label}
           autocomplete="off"
           type="search"
           inputmode="search"
@@ -1064,10 +1075,10 @@
         {@render resultList(paletteResults, paletteSel, runPaletteResult)}
       </div>
       <div class="palette-foot">
-        <span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
-        <span><kbd>↵</kbd> open</span>
-        <span><kbd>/</kbd> focus search</span>
-        <span><kbd>Alt</kbd> + <kbd>1</kbd>…<kbd>9</kbd> workspaces</span>
+        <span><kbd>↑</kbd> <kbd>↓</kbd> {t.palette.move}</span>
+        <span><kbd>↵</kbd> {t.palette.open}</span>
+        <span><kbd>/</kbd> {t.palette.focusSearch}</span>
+        <span><kbd>Alt</kbd> + <kbd>1</kbd>…<kbd>9</kbd> {t.palette.workspaces}</span>
       </div>
     </div>
   </div>

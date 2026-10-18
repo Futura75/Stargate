@@ -15,7 +15,7 @@ describe("triggering and dismissing a toast", () => {
     });
 
     expect(screen.getByText("Deleted workspace “Personal”")).toBeInTheDocument();
-    const undoButton = screen.getByRole("button", { name: /Undo/ });
+    const undoButton = screen.getByRole("button", { name: /Annulla/ });
 
     await fireEvent.click(undoButton);
     expect(onundo).toHaveBeenCalledWith(1);
@@ -30,7 +30,7 @@ describe("triggering and dismissing a toast", () => {
     });
 
     expect(screen.getByText("No undo for this one")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Undo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Annulla/ })).not.toBeInTheDocument();
   });
 
   it("renders nothing once the toast list is emptied (dismissal)", () => {

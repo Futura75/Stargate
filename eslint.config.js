@@ -39,6 +39,16 @@ export default tseslint.config(
     },
   },
   {
+    // Rune modules (*.svelte.ts) are TypeScript compiled by Svelte.
+    files: ["**/*.svelte.ts"],
+    languageOptions: {
+      parser: svelteParser,
+      parserOptions: {
+        parser: tseslint.parser,
+      },
+    },
+  },
+  {
     rules: {
       // Guardrails from issue #51: catch files/functions growing unchecked
       // (App.svelte reached 2465 lines before anyone noticed — see #48).

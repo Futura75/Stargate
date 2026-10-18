@@ -67,7 +67,7 @@ describe("updateBlockSettings", () => {
     const next = updateBlockSettings(f.s, f.ws1, f.colA, f.blkA, { collapsed: true });
     expect(blockA(next).collapsed).toBe(true);
     expect(blockA(f.s).collapsed).toBeUndefined();
-    expect(blockA(next).title).toBe("Welcome");
+    expect(blockA(next).title).toBe("Benvenuto");
   });
 
   it("sets a link style", () => {
@@ -87,7 +87,7 @@ describe("updateBlockSettings", () => {
       faviconSize: "lg",
     });
     expect(blockA(next)).toMatchObject({ description: "News", faviconSize: "lg" });
-    expect(blockA(next).title).toBe("Welcome");
+    expect(blockA(next).title).toBe("Benvenuto");
   });
 
   it("leaves sibling blocks untouched", () => {

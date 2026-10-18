@@ -36,12 +36,12 @@ describe("bookmarks import happy path", () => {
     await fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 2. the folder picker opens, showing the parsed top-level folder
-    expect(await screen.findByRole("dialog", { name: "Import browser bookmarks" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Importa segnalibri del browser" })).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
     expect(closeSettings).toHaveBeenCalledTimes(1);
 
     // 3. confirm the import with the default selection
-    const confirmButton = screen.getByRole("button", { name: "Import" });
+    const confirmButton = screen.getByRole("button", { name: "Importa" });
     expect(confirmButton).not.toBeDisabled();
     await fireEvent.click(confirmButton);
 
@@ -52,9 +52,9 @@ describe("bookmarks import happy path", () => {
     expect(created.name).toBe("Work");
 
     expect(onImported).toHaveBeenCalledWith(created.id);
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining("Added 1 workspace"));
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining("Aggiunto 1 workspace"));
 
     // the picker closes after a successful import
-    expect(screen.queryByRole("dialog", { name: "Import browser bookmarks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Importa segnalibri del browser" })).not.toBeInTheDocument();
   });
 });

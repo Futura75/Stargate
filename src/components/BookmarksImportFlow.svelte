@@ -4,8 +4,7 @@
      hardcoded ICONS[name] string keyed by literal icon names; there is no
      user-controlled content reaching {@html} here. */
   import {
-    DEFAULT_UNGROUPED_BLOCK_TITLE,
-    DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
+    bookmarksImportTitles,
     folderPathKey,
     importBookmarksFromTree,
     listBookmarkFolders,
@@ -15,6 +14,8 @@
   } from "../store/bookmarks";
   import type { StargateState } from "../store/types";
   import { icon } from "./icons";
+  import { languageOf } from "../store/core";
+  import { errorText, i18n } from "../i18n/state.svelte";
 
   let {
     doc,
@@ -29,6 +30,9 @@
     onImported: (activeId: string) => void;
     closeSettings: () => void;
   } = $props();
+
+  const t = $derived(i18n.t);
+  const importTitles = $derived(bookmarksImportTitles(languageOf(doc.settings)));
 
   let bookmarksInput: HTMLInputElement | null = null;
   let bookmarksTree = $state<BookmarksTree | null>(null);
@@ -72,18 +76,18 @@
     input.value = ""; // allow re-picking the same file after a cancel
     if (!file) return;
     const reader = new FileReader();
-    reader.onerror = () => showToast("Could not read this file.");
+    reader.onerror = () => showToast(t.errors.fileUnreadable);
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
       let tree: BookmarksTree;
       try {
         tree = parseBookmarksHtml(text);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Could not read this bookmarks file.");
+        showToast(errorText(err, t.errors.bookmarksUnreadable));
         return;
       }
       if (tree.entries.length === 0) {
-        showToast("No bookmarks found in this file.");
+        showToast(t.toast.noBookmarks);
         return;
       }
       closeSettings();
@@ -135,18 +139,16 @@
     const created = next.workspaces.filter((w) => !known.has(w.id));
     closeBookmarksPicker();
     if (created.length === 0) {
-      showToast("Nothing to import in the selected folders.");
+      showToast(t.toast.nothingToImport);
       return;
     }
     commit(next);
     onImported(created[0].id);
-    showToast(`Added ${created.length} ${created.length === 1 ? "workspace" : "workspaces"} from your bookmarks`);
+    showToast(t.toast.bookmarksAdded(created.length));
   }
 
   function bookmarksFolderSummary(row: BookmarkFolderRow): string {
-    return `${row.links} ${row.links === 1 ? "link" : "links"} · ${row.subfolders} ${
-      row.subfolders === 1 ? "folder" : "folders"
-    }`;
+    return t.bookmarks.folderSummary(row.links, row.subfolders);
   }
 
 </script>
@@ -161,16 +163,13 @@
       if (e.target === e.currentTarget) closeBookmarksPicker();
     }}
   >
-    <div class="dialog wide" role="dialog" aria-modal="true" aria-label="Import browser bookmarks" tabindex="-1">
+    <div class="dialog wide" role="dialog" aria-modal="true" aria-label={t.bookmarks.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Import browser bookmarks</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeBookmarksPicker}>{@html icon("x")}</button>
+        <h2>{t.bookmarks.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeBookmarksPicker}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
-        <p class="help-note">
-          Each top-level folder becomes a new workspace and its subfolders become blocks. Uncheck anything you want to
-          leave out. Your current workspaces are not changed.
-        </p>
+        <p class="help-note">{t.bookmarks.intro}</p>
         <div class="bookmarks-picker">
           {#each bookmarksFolders as row (folderPathKey(row.path))}
             {@const pruned = bookmarksFolderPruned(row.path)}
@@ -190,24 +189,23 @@
         {#if bookmarksFolders.length > 0}
           <label class="check-row">
             <input type="checkbox" bind:checked={bookmarksIncludeUngroupedBlock} />
-            Put a folder's loose links in a “{DEFAULT_UNGROUPED_BLOCK_TITLE}” block
+            {t.bookmarks.ungroupedBlock(importTitles.ungroupedBlock)}
           </label>
         {/if}
         {#if bookmarksHasRootLinks}
           <label class="check-row">
             <input type="checkbox" bind:checked={bookmarksIncludeRootLinks} />
-            Import the {bookmarksRootLinkCount} {bookmarksRootLinkCount === 1 ? "link" : "links"} outside any folder as a
-            “{DEFAULT_BOOKMARKS_WORKSPACE_TITLE}” workspace
+            {t.bookmarks.rootLinks(bookmarksRootLinkCount, importTitles.workspace)}
           </label>
         {/if}
       </div>
       <div class="dialog-foot">
         <span class="help-note push-right">
-          {bookmarksWorkspaceCount} {bookmarksWorkspaceCount === 1 ? "workspace" : "workspaces"} will be added
+          {t.bookmarks.willBeAdded(bookmarksWorkspaceCount)}
         </span>
-        <button type="button" class="btn ghost" onclick={closeBookmarksPicker}>Cancel</button>
+        <button type="button" class="btn ghost" onclick={closeBookmarksPicker}>{t.common.cancel}</button>
         <button type="button" class="btn primary" onclick={confirmBookmarksImport} disabled={!bookmarksCanConfirm}>
-          Import
+          {t.common.import}
         </button>
       </div>
     </div>

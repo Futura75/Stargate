@@ -112,6 +112,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
     "theme": "system",             // "light" | "dark" | "system"
     "searchEngine": "google",      // "google" | "ddg" | "bing"
     "faviconSource": "google-s2",  // "off" | "google-s2" | "duckduckgo"  (default "google-s2")
+    "language": "it",              // optional: "it" | "en"; absent = "it" (no schema bump)
     "openWorkspace": "first",      // optional: "first" | "last"; absent = "first"
     "lastWorkspaceId": "opaque-random-string",  // optional; restored when openWorkspace = "last"
     "skin": "salvia"               // optional: "salvia" | "giardino" | "atlante" | "reticolo"; absent = "salvia"
@@ -152,7 +153,7 @@ Single JSON document; ordering is **positional** (array order is the order); all
 }
 ```
 
-**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64; `linkStyle` ∈ `list|detail|tiles` (absent = `list`, unknown values dropped on import); `openWorkspace` ∈ `first|last` (absent = `first`); `skin` ∈ `salvia|giardino|atlante|reticolo` (absent = `salvia`, unknown values dropped on import; additive and optional, so `schemaVersion` stays `"4"` and older files import untouched); `collapsed` boolean (absent = `false`). Schema history: v1 (initial) → v2 (workspace appearance + per-block settings) → v3 (link styles) → v4 (startup behavior + block collapse).
+**Conventions:** ids opaque-random; order positional (no sort fields); due date-only `YYYY-MM-DD`; favicon 32×32 PNG ≤ 8 KB, never a remote URL; backgrounds embedded base64; `linkStyle` ∈ `list|detail|tiles` (absent = `list`, unknown values dropped on import); `openWorkspace` ∈ `first|last` (absent = `first`); `skin` ∈ `salvia|giardino|atlante|reticolo` (absent = `salvia`, unknown values dropped on import; additive and optional, so `schemaVersion` stays `"4"` and older files import untouched); `collapsed` boolean (absent = `false`); `language` ∈ `it|en` (absent = `it`, unknown values dropped on import — added without a schema bump so files stay importable by older v4 builds, which keep the field as-is). Schema history: v1 (initial) → v2 (workspace appearance + per-block settings) → v3 (link styles) → v4 (startup behavior + block collapse).
 
 ## 5. Storage & resilience (#3, #7)
 

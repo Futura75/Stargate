@@ -28,7 +28,8 @@
   import { browserCodec } from "../store/codec";
   import type { Block, Column, FaviconSize, Link, LinkStyle, StargateState, Workspace } from "../store/types";
   import { autofocus } from "./actions";
-  import { bareUrl, FAVICON_SIZE_LABEL, FAVICON_SIZE_OPTIONS, FAVICON_SIZE_PX, LINK_STYLE_LABEL, LINK_STYLE_OPTIONS, TILE_FAVICON_PX } from "./linkDisplay";
+  import { i18n } from "../i18n/state.svelte";
+  import { bareUrl, FAVICON_SIZE_OPTIONS, FAVICON_SIZE_PX, LINK_STYLE_OPTIONS, TILE_FAVICON_PX } from "./linkDisplay";
   import { BLOCK_TITLE_SIZE_PX } from "./blockDisplay";
   import Favicon from "./Favicon.svelte";
   import { icon } from "./icons";
@@ -59,6 +60,8 @@
     renaming: { kind: "column" | "kanbanColumn"; id: string } | null;
     renameDraft: string;
   } = $props();
+
+  const t = $derived(i18n.t);
 
   const workspaceLayout = $derived(active?.layout ?? DEFAULT_WORKSPACE_LAYOUT);
   const blockTitleSize = $derived(active?.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE);
@@ -109,7 +112,7 @@
           commit(setFavicon(doc, wsId, columnId, blockId, linkId, favicon));
         } catch (err) {
           console.error(err);
-          showToast("That image can't be used as an icon (max 8 KB after scaling).");
+          showToast(t.errors["favicon-too-large"]);
         }
       };
       reader.readAsDataURL(file);
@@ -201,12 +204,12 @@
 
   function onDeleteColumn(column: Column) {
     if (!active) return;
-    commitWithUndo(deleteColumn(doc, active.id, column.id), `Deleted column “${column.title}”`);
+    commitWithUndo(deleteColumn(doc, active.id, column.id), t.toast.deletedColumn(column.title));
   }
 
   function onDeleteBlock(column: Column, block: Block) {
     if (!active) return;
-    commitWithUndo(deleteBlock(doc, active.id, column.id, block.id), `Deleted block “${block.title}”`);
+    commitWithUndo(deleteBlock(doc, active.id, column.id, block.id), t.toast.deletedBlock(block.title));
   }
 
   function onToggleCollapse(column: Column, block: Block) {
@@ -233,7 +236,7 @@
     if (!active || settingsColumnId === null || settingsBlockId === null) return;
     const column = active.columns.find((c) => c.id === settingsColumnId);
     const block = column?.blocks.find((b) => b.id === settingsBlockId);
-    const title = settingsTitle.trim() || block?.title || "Untitled block";
+    const title = settingsTitle.trim() || block?.title || t.seed.untitledBlock;
     let next = renameBlock(doc, active.id, settingsColumnId, settingsBlockId, title);
     next = updateBlockSettings(next, active.id, settingsColumnId, settingsBlockId, {
       description: settingsDescription.trim(),
@@ -340,7 +343,7 @@
   function onDeleteLink(columnId: string, blockId: string, link: Link) {
     if (!active) return;
     if (linkSettingsLinkId === link.id) closeLinkSettings();
-    commitWithUndo(deleteLink(doc, active.id, columnId, blockId, link.id), `Deleted “${link.title}”`);
+    commitWithUndo(deleteLink(doc, active.id, columnId, blockId, link.id), t.toast.deletedLink(link.title));
   }
 
   // ---------- drag & drop ----------
@@ -439,7 +442,7 @@
         class="col"
         class:drop-over={dropTarget === `col:${column.id}`}
         role="group"
-        aria-label={`${column.title} column`}
+        aria-label={t.board.columnLabel(column.title)}
         ondragover={(e) => columnDragOver(e, column.id)}
         ondrop={(e) => dropOnColumn(e, column, columnIndex)}
       >
@@ -456,18 +459,18 @@
               bind:value={renameDraft}
               onkeydown={onRenameKeydown}
               onblur={commitRename}
-              aria-label="Column title"
+              aria-label={t.board.columnTitle}
               use:autofocus={true}
             />
           {:else}
             <button
               class="col-title"
-              title="Click to rename · drag to reorder"
+              title={t.board.renameHint}
               onclick={() => startRename("column", column.id, column.title)}
             >{column.title}</button>
           {/if}
           <div class="hover-tools">
-            <button class="icon-btn danger" title="Delete column" onclick={() => onDeleteColumn(column)}>{@html icon("trash")}</button>
+            <button class="icon-btn danger" title={t.board.deleteColumn} onclick={() => onDeleteColumn(column)}>{@html icon("trash")}</button>
           </div>
         </header>
 
@@ -490,7 +493,7 @@
             >
               <button
                 class="icon-btn collapse-toggle"
-                title={collapsed ? "Expand block" : "Collapse block"}
+                title={collapsed ? t.board.expandBlock : t.board.collapseBlock}
                 aria-expanded={!collapsed}
                 onclick={() => onToggleCollapse(column, block)}
               >
@@ -499,8 +502,8 @@
               <h3>{block.title}</h3>
               {#if collapsed}<span class="count">{block.links.length}</span>{/if}
               <div class="hover-tools">
-                <button class="icon-btn" title="Block settings" onclick={() => openBlockSettings(column, block)}>{@html icon("sliders")}</button>
-                <button class="icon-btn danger" title="Delete block" onclick={() => onDeleteBlock(column, block)}>{@html icon("x")}</button>
+                <button class="icon-btn" title={t.board.blockSettings} onclick={() => openBlockSettings(column, block)}>{@html icon("sliders")}</button>
+                <button class="icon-btn danger" title={t.board.deleteBlock} onclick={() => onDeleteBlock(column, block)}>{@html icon("x")}</button>
               </div>
             </header>
 
@@ -535,8 +538,8 @@
                       {/if}
                     </a>
                     <div class="hover-tools">
-                      <button class="icon-btn" title="Edit link" onclick={() => openLinkSettings(column, block, link)}>{@html icon("sliders")}</button>
-                      <button class="icon-btn danger" title="Delete link" onclick={() => onDeleteLink(column.id, block.id, link)}>{@html icon("x")}</button>
+                      <button class="icon-btn" title={t.board.editLink} onclick={() => openLinkSettings(column, block, link)}>{@html icon("sliders")}</button>
+                      <button class="icon-btn danger" title={t.board.deleteLink} onclick={() => onDeleteLink(column.id, block.id, link)}>{@html icon("x")}</button>
                     </div>
                   </div>
                 {/each}
@@ -546,16 +549,16 @@
                 <form class="add-form" onsubmit={(e) => addLinkForm(e, column, block)}>
                   <input
                     class="inline-input"
-                    placeholder="Title https://… or just a domain"
-                    aria-label="New link"
+                    placeholder={t.board.newLinkPlaceholder}
+                    aria-label={t.board.newLink}
                     onblur={onAddBlur}
                     onkeydown={onAddKeydown}
                     use:autofocus
                   />
-                  <button class="icon-btn" type="submit" title="Add link">{@html icon("plus")}</button>
+                  <button class="icon-btn" type="submit" title={t.board.addLink}>{@html icon("plus")}</button>
                 </form>
               {:else}
-                <button class="ghost-add" onclick={() => startAdding("link", block.id)}>{@html icon("plus")} Add link</button>
+                <button class="ghost-add" onclick={() => startAdding("link", block.id)}>{@html icon("plus")} {t.board.addLink}</button>
               {/if}
             {/if}
           </article>
@@ -565,16 +568,16 @@
           <form class="add-form" onsubmit={(e) => addBlockForm(e, column)}>
             <input
               class="inline-input"
-              placeholder="Block title"
-              aria-label="New block"
+              placeholder={t.board.blockTitle}
+              aria-label={t.board.newBlock}
               onblur={onAddBlur}
               onkeydown={onAddKeydown}
               use:autofocus
             />
-            <button class="icon-btn" type="submit" title="Add block">{@html icon("plus")}</button>
+            <button class="icon-btn" type="submit" title={t.board.addBlock}>{@html icon("plus")}</button>
           </form>
         {:else}
-          <button class="ghost-add col-add" onclick={() => startAdding("block", column.id)}>{@html icon("plus")} Add block</button>
+          <button class="ghost-add col-add" onclick={() => startAdding("block", column.id)}>{@html icon("plus")} {t.board.addBlock}</button>
         {/if}
       </section>
     {/each}
@@ -584,17 +587,17 @@
         <form class="add-form" onsubmit={addColumnForm}>
           <input
             class="inline-input"
-            placeholder="Column title"
-            aria-label="New column"
+            placeholder={t.board.columnTitle}
+            aria-label={t.board.newColumn}
             onblur={onAddBlur}
             onkeydown={onAddKeydown}
             use:autofocus
           />
-          <button class="icon-btn" type="submit" title="Add column">{@html icon("plus")}</button>
+          <button class="icon-btn" type="submit" title={t.board.addColumn}>{@html icon("plus")}</button>
         </form>
       </div>
     {:else}
-      <button class="add-tile" onclick={() => startAdding("column", active.id)}>{@html icon("plus")}<span>New column</span></button>
+      <button class="add-tile" onclick={() => startAdding("column", active.id)}>{@html icon("plus")}<span>{t.board.newColumn}</span></button>
     {/if}
   </div>
 {/if}
@@ -607,43 +610,43 @@
       if (e.target === e.currentTarget) closeBlockSettings();
     }}
   >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Block settings" tabindex="-1">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label={t.blockSettings.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Block settings</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeBlockSettings}>{@html icon("x")}</button>
+        <h2>{t.blockSettings.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeBlockSettings}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         <label class="field">
-          <span class="setting-label">Title</span>
-          <input bind:value={settingsTitle} placeholder="Block title…" onkeydown={onBlockSettingsKeydown} use:autofocus />
+          <span class="setting-label">{t.blockSettings.blockTitle}</span>
+          <input bind:value={settingsTitle} placeholder={t.blockSettings.titlePlaceholder} onkeydown={onBlockSettingsKeydown} use:autofocus />
         </label>
         <label class="field">
-          <span class="setting-label">Description</span>
-          <input bind:value={settingsDescription} placeholder="Optional" onkeydown={onBlockSettingsKeydown} />
+          <span class="setting-label">{t.blockSettings.description}</span>
+          <input bind:value={settingsDescription} placeholder={t.blockSettings.optional} onkeydown={onBlockSettingsKeydown} />
         </label>
         <fieldset class="field">
-          <legend class="setting-label">Link style</legend>
+          <legend class="setting-label">{t.blockSettings.linkStyle}</legend>
           <div class="seg">
             {#each LINK_STYLE_OPTIONS as style (style)}
               <button type="button" class:sel={settingsLinkStyle === style} onclick={() => (settingsLinkStyle = style)}>
-                {LINK_STYLE_LABEL[style]}
+                {t.linkStyle[style]}
               </button>
             {/each}
           </div>
         </fieldset>
         <fieldset class="field">
-          <legend class="setting-label">Favicon size</legend>
+          <legend class="setting-label">{t.blockSettings.faviconSize}</legend>
           <div class="seg">
             {#each FAVICON_SIZE_OPTIONS as size (size)}
               <button type="button" class:sel={settingsFaviconSize === size} onclick={() => (settingsFaviconSize = size)}>
-                {FAVICON_SIZE_LABEL[size]}
+                {t.faviconSize[size]}
               </button>
             {/each}
           </div>
-          {#if settingsLinkStyle === "tiles"}<span class="help-note">Tiles always use a large icon.</span>{/if}
+          {#if settingsLinkStyle === "tiles"}<span class="help-note">{t.blockSettings.tilesNote}</span>{/if}
         </fieldset>
         <div class="field">
-          <span class="setting-label">Preview</span>
+          <span class="setting-label">{t.blockSettings.preview}</span>
           <div class="preview">
             <div class="links links-{settingsLinkStyle}">
               {#each [{ id: "p1", title: "GitHub", url: "https://github.com" }, { id: "p2", title: "Hacker News", url: "https://news.ycombinator.com" }, { id: "p3", title: "Il Post", url: "https://www.ilpost.it" }] as sample (sample.id)}
@@ -667,8 +670,8 @@
         </div>
       </div>
       <div class="dialog-foot">
-        <button type="button" class="btn ghost" onclick={closeBlockSettings}>Cancel</button>
-        <button type="button" class="btn primary" onclick={saveBlockSettings}>Save</button>
+        <button type="button" class="btn ghost" onclick={closeBlockSettings}>{t.common.cancel}</button>
+        <button type="button" class="btn primary" onclick={saveBlockSettings}>{t.common.save}</button>
       </div>
     </div>
   </div>
@@ -683,31 +686,31 @@
       if (e.target === e.currentTarget) closeLinkSettings();
     }}
   >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit link" tabindex="-1">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label={t.linkSettings.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Edit link</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeLinkSettings}>{@html icon("x")}</button>
+        <h2>{t.linkSettings.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeLinkSettings}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         {#if link}
           <div class="link-icon-row">
             <Favicon {link} px={40} faviconSource={doc.settings.faviconSource} />
             <span class="link-icon-meta">
-              <b>{link.favicon ? "Custom icon" : "Letter tile"}</b>
-              <span class="help-note">{link.favicon ? "Stored with your data, works offline." : "Upload a small image to use your own icon."}</span>
+              <b>{link.favicon ? t.linkSettings.customIcon : t.linkSettings.letterTile}</b>
+              <span class="help-note">{link.favicon ? t.linkSettings.customIconNote : t.linkSettings.letterTileNote}</span>
             </span>
-            <button type="button" class="btn sm" onclick={pickLinkFavicon}>{@html icon("upload")} {link.favicon ? "Change" : "Upload icon"}</button>
+            <button type="button" class="btn sm" onclick={pickLinkFavicon}>{@html icon("upload")} {link.favicon ? t.linkSettings.change : t.linkSettings.uploadIcon}</button>
             {#if link.favicon}
-              <button type="button" class="btn sm danger" onclick={removeLinkFavicon}>Remove</button>
+              <button type="button" class="btn sm danger" onclick={removeLinkFavicon}>{t.common.remove}</button>
             {/if}
           </div>
         {/if}
         <label class="field">
-          <span class="setting-label">Title</span>
-          <input bind:value={linkSettingsTitle} placeholder="Title…" onkeydown={onLinkSettingsKeydown} use:autofocus />
+          <span class="setting-label">{t.linkSettings.linkTitle}</span>
+          <input bind:value={linkSettingsTitle} placeholder={t.linkSettings.titlePlaceholder} onkeydown={onLinkSettingsKeydown} use:autofocus />
         </label>
         <label class="field">
-          <span class="setting-label">URL</span>
+          <span class="setting-label">{t.linkSettings.url}</span>
           <input bind:value={linkSettingsUrl} placeholder="https://…" onkeydown={onLinkSettingsKeydown} />
         </label>
       </div>
@@ -715,10 +718,10 @@
         {#if link && linkSettingsColumnId && linkSettingsBlockId}
           {@const columnId = linkSettingsColumnId}
           {@const blockId = linkSettingsBlockId}
-          <button type="button" class="btn danger push-right" onclick={() => onDeleteLink(columnId, blockId, link)}>{@html icon("trash")} Delete</button>
+          <button type="button" class="btn danger push-right" onclick={() => onDeleteLink(columnId, blockId, link)}>{@html icon("trash")} {t.common.delete}</button>
         {/if}
-        <button type="button" class="btn ghost" onclick={closeLinkSettings}>Cancel</button>
-        <button type="button" class="btn primary" onclick={saveLinkSettings}>Save</button>
+        <button type="button" class="btn ghost" onclick={closeLinkSettings}>{t.common.cancel}</button>
+        <button type="button" class="btn primary" onclick={saveLinkSettings}>{t.common.save}</button>
       </div>
     </div>
   </div>
