@@ -1,4 +1,5 @@
 import { MAX_BACKGROUND_BASE64, MAX_FAVICON_BASE64 } from "./core";
+import { StargateError } from "./errors";
 
 export interface ImageCodec {
   normalizeFavicon(dataUrl: string): Promise<{ dataUrl: string; source: "custom"; fetchedAt: string }>;
@@ -51,7 +52,7 @@ export const browserCodec: ImageCodec = {
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Could not load image"));
+      img.onerror = () => reject(new StargateError("image-unreadable", "Could not load image"));
       img.src = dataUrl;
     });
 
@@ -64,7 +65,7 @@ export const browserCodec: ImageCodec = {
 
     const out = canvas.toDataURL("image/png");
     if (out.length > MAX_FAVICON_BASE64) {
-      throw new Error("Favicon exceeds 8 KB");
+      throw new StargateError("favicon-too-large", "Favicon exceeds 8 KB");
     }
     return { dataUrl: out, source: "custom" as const, fetchedAt: new Date().toISOString() };
   },
@@ -73,7 +74,7 @@ export const browserCodec: ImageCodec = {
     const img = new Image();
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Could not load image"));
+      img.onerror = () => reject(new StargateError("image-unreadable", "Could not load image"));
       img.src = dataUrl;
     });
 
@@ -88,7 +89,7 @@ export const browserCodec: ImageCodec = {
     }
 
     if (best === null || best.length > MAX_BACKGROUND_BASE64) {
-      throw new Error("This image is too large to use as a background (over 700 KB after compression).");
+      throw new StargateError("background-too-large", "This image is too large to use as a background (over 700 KB after compression).");
     }
     return best;
   },

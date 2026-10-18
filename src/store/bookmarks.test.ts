@@ -181,7 +181,7 @@ describe("importBookmarksFromTree", () => {
       folder("Beta", [folder("F", [link("B", "https://b.com")])]),
     );
     const next = importBookmarksFromTree(seed(), parsed, { excludedFolders: [] });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Alpha", "Beta"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Alpha", "Beta"]);
   });
 
   it("turns a folder into a workspace with one Links column", () => {
@@ -190,13 +190,13 @@ describe("importBookmarksFromTree", () => {
       tree(folder("Dev", [folder("Frontend", [link("React", "https://react.dev")])])),
       { excludedFolders: [] },
     );
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Dev"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Dev"]);
     const dev = next.workspaces[1];
     expect(dev.columns.map((c) => c.title)).toEqual([DEFAULT_BOOKMARKS_COLUMN_TITLE]);
     expect(dev.columns[0].blocks.map((b) => b.title)).toEqual(["Frontend"]);
     expect(dev.columns[0].blocks[0].links.map((l) => l.title)).toEqual(["React"]);
     expect(dev.columns[0].blocks[0].links[0].url).toBe("https://react.dev");
-    expect(dev.kanban.columns.map((c) => c.title)).toEqual(["Todo", "In Progress", "Done"]);
+    expect(dev.kanban.columns.map((c) => c.title)).toEqual(["Da fare", "In corso", "Fatto"]);
   });
 
   it("uses the app's default appearance, layout, block title size and link style", () => {
@@ -265,7 +265,7 @@ describe("importBookmarksFromTree", () => {
       tree(folder("Empty folder"), folder("Only empty subfolder", [folder("Nothing")])),
       { excludedFolders: [] },
     );
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale"]);
   });
 
   it("skips empty subfolder blocks but keeps loose links", () => {
@@ -284,7 +284,7 @@ describe("importBookmarksFromTree", () => {
       folder("Fun", [folder("Games", [link("Chess", "https://chess.com")])]),
     );
     const next = importBookmarksFromTree(seed(), parsed, { excludedFolders: [folderPathKey(["Fun"])] });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Dev"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Dev"]);
     expect(next.workspaces[1].columns[0].blocks[0].title).toBe("Frontend");
   });
 
@@ -326,7 +326,7 @@ describe("importBookmarksFromTree", () => {
       tree(folder("Dev", [folder("Only", [link("X", "https://x.com")])])),
       { excludedFolders: [folderPathKey(["Dev", "Only"])] },
     );
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale"]);
   });
 
   it("skips loose links at the folder root when includeUngroupedBlock is off", () => {
@@ -349,7 +349,7 @@ describe("importBookmarksFromTree", () => {
       excludedFolders: [],
       includeUngroupedBlock: false,
     });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale"]);
   });
 
   it("adds a Generali block to every workspace with loose links by default", () => {
@@ -372,14 +372,14 @@ describe("importBookmarksFromTree", () => {
     const parsed = tree(link("Root A", "https://a.com"), link("Root B", "https://b.com"));
 
     const skipped = importBookmarksFromTree(seed(), parsed, { excludedFolders: [] });
-    expect(skipped.workspaces.map((w) => w.name)).toEqual(["Personal"]);
+    expect(skipped.workspaces.map((w) => w.name)).toEqual(["Personale"]);
 
     const imported = importBookmarksFromTree(seed(), parsed, {
       excludedFolders: [],
       includeRootLinks: true,
     });
     expect(imported.workspaces.map((w) => w.name)).toEqual([
-      "Personal",
+      "Personale",
       DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
     ]);
     const ws = imported.workspaces[1];
@@ -393,7 +393,7 @@ describe("importBookmarksFromTree", () => {
       excludedFolders: [],
       includeRootLinks: true,
     });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Dev"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Dev"]);
   });
 
   it("suffixes duplicate workspace names against existing state and each other", () => {
@@ -404,7 +404,7 @@ describe("importBookmarksFromTree", () => {
       folder("Dev", [folder("F", [link("Y", "https://y.com")])]),
     );
     const next = importBookmarksFromTree(state, parsed, { excludedFolders: [] });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Dev", "Dev (2)", "Dev (3)"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Dev", "Dev (2)", "Dev (3)"]);
   });
 
   it("keeps the bookmarks-file order regardless of the folder list order", () => {
@@ -413,7 +413,7 @@ describe("importBookmarksFromTree", () => {
       folder("Alpha", [folder("F", [link("A", "https://a.com")])]),
     );
     const next = importBookmarksFromTree(seed(), parsed, { excludedFolders: [] });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Beta", "Alpha"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Beta", "Alpha"]);
   });
 
   it("uses folder paths, not positions, to identify exclusions", () => {
@@ -423,7 +423,7 @@ describe("importBookmarksFromTree", () => {
     );
     // An exclusion key that matches no folder path is ignored.
     const next = importBookmarksFromTree(seed(), parsed, { excludedFolders: ["[\"Nope\"]", "[]"] });
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Dev"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Dev"]);
   });
 
   it("appends new workspaces without mutating the input state", () => {

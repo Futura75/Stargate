@@ -36,6 +36,8 @@
     setBackgroundAlpha,
     setFavicon,
     setFaviconSource,
+    languageOf,
+    setLanguage,
     setLastWorkspaceId,
     setLinkUrl,
     setOpenWorkspace,
@@ -52,8 +54,7 @@
     DEFAULT_WORKSPACE_LAYOUT,
   } from "./store/core";
   import {
-    DEFAULT_UNGROUPED_BLOCK_TITLE,
-    DEFAULT_BOOKMARKS_WORKSPACE_TITLE,
+    bookmarksImportTitles,
     folderPathKey,
     importBookmarksFromTree,
     listBookmarkFolders,
@@ -61,9 +62,11 @@
     type BookmarkFolderRow,
     type BookmarksTree,
   } from "./store/bookmarks";
+  import { LANGUAGE_OPTIONS, messagesFor } from "./i18n";
   import { browserCodec } from "./store/codec";
+  import { StargateError } from "./store/errors";
   import { loadState, meterState, saveState } from "./store/persistence";
-  import { SyncEngine, type SyncStatus } from "./store/sync";
+  import { SYNC_CONFLICT_MESSAGE, SyncEngine, type SyncStatus } from "./store/sync";
   import { signIn, signOut, supabaseRemote, syncConfigured, watchSession, type OAuthProvider } from "./sync/supabase";
   import type {
     Block,
@@ -87,6 +90,11 @@
   let activeId: string = $state(resolveActiveWorkspace(loaded.state)?.id ?? "");
 
   const active = $derived(doc.workspaces.find((w) => w.id === activeId) ?? doc.workspaces[0]);
+
+  const language = $derived(languageOf(doc.settings));
+  /** UI strings in the current language; reading through `t` keeps the markup in step with the setting. */
+  const t = $derived(messagesFor(language));
+  const importTitles = $derived(bookmarksImportTitles(language));
 
   const workspaceLayout = $derived(active?.layout ?? DEFAULT_WORKSPACE_LAYOUT);
   const blockTitleSize = $derived(active?.blockTitleSize ?? DEFAULT_BLOCK_TITLE_SIZE);
@@ -161,11 +169,6 @@
   );
 
   const THEME_CYCLE: Theme[] = ["light", "dark", "system"];
-  const THEME_LABEL: Record<Theme, string> = {
-    light: "Light",
-    dark: "Dark",
-    system: "System",
-  };
   const THEME_ICON: Record<Theme, string> = {
     light: "sun",
     dark: "moon",
@@ -181,18 +184,8 @@
   const ENGINE_OPTIONS: SearchEngine[] = ["google", "ddg", "bing"];
 
   const FAVICON_SOURCE_OPTIONS: FaviconSource[] = ["off", "google-s2", "duckduckgo"];
-  const FAVICON_SOURCE_LABEL: Record<FaviconSource, string> = {
-    off: "Off",
-    "google-s2": "Google",
-    duckduckgo: "DuckDuckGo",
-  };
 
   const FAVICON_SIZE_OPTIONS: FaviconSize[] = ["sm", "md", "lg"];
-  const FAVICON_SIZE_LABEL: Record<FaviconSize, string> = {
-    sm: "Small 16",
-    md: "Medium 24",
-    lg: "Large 32",
-  };
   const FAVICON_SIZE_PX: Record<FaviconSize, number> = {
     sm: 16,
     md: 24,
@@ -200,21 +193,11 @@
   };
 
   const LINK_STYLE_OPTIONS: LinkStyle[] = ["list", "detail", "tiles"];
-  const LINK_STYLE_LABEL: Record<LinkStyle, string> = {
-    list: "List",
-    detail: "Detail",
-    tiles: "Tiles",
-  };
 
   /** `tiles` renders a fixed large favicon regardless of the block's faviconSize (#33). */
   const TILE_FAVICON_PX = 40;
 
   const BLOCK_TITLE_SIZE_OPTIONS: BlockTitleSize[] = ["sm", "md", "lg"];
-  const BLOCK_TITLE_SIZE_LABEL: Record<BlockTitleSize, string> = {
-    sm: "Small",
-    md: "Medium",
-    lg: "Large",
-  };
   const BLOCK_TITLE_SIZE_PX: Record<BlockTitleSize, number> = {
     sm: 14,
     md: 16,
@@ -222,10 +205,6 @@
   };
 
   const OPEN_WORKSPACE_OPTIONS = ["first", "last"] as const;
-  const OPEN_WORKSPACE_LABEL: Record<(typeof OPEN_WORKSPACE_OPTIONS)[number], string> = {
-    first: "First workspace",
-    last: "Last used",
-  };
 
   const WORKSPACE_ICONS = ["🏠", "💼", "✈️", "📚", "🎵", "🧪", "🛒", "🎮", "🌿", "⭐", "🧭", "🛠️", "🎨", "📰", "💡", "✨"];
   const WORKSPACE_COLORS = ["#5f7161", "#3f6d8c", "#b0683f", "#8a5a9c", "#a8873a", "#4f7f7a", "#9b4b5a", "#59606b"];
@@ -294,7 +273,19 @@
     document.body.style.setProperty("--ws", active?.color ?? "#5f7161");
   });
 
-  const todayLabel = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
+  $effect(() => {
+    document.documentElement.lang = t.locale;
+  });
+
+  const todayLabel = $derived(
+    new Date().toLocaleDateString(t.locale, { weekday: "long", month: "long", day: "numeric" }),
+  );
+
+  /** User-facing text for a caught error: translated when it carries a code, else its own message. */
+  function errorText(err: unknown, fallback: string): string {
+    if (err instanceof StargateError) return t.errors[err.code];
+    return err instanceof Error ? err.message : fallback;
+  }
 
   function commit(next: StargateState): boolean {
     try {
@@ -306,7 +297,7 @@
       return true;
     } catch (err) {
       pendingSave = next;
-      storageError = err instanceof Error ? err.message : "Could not save your changes.";
+      storageError = errorText(err, t.errors.saveFailed);
       return false;
     }
   }
@@ -319,14 +310,6 @@
   let syncEngine: SyncEngine | null = null;
   let syncUserId: string | null = null;
 
-  const SYNC_STATUS_LABEL: Record<SyncStatus, string> = {
-    off: "Not signed in.",
-    syncing: "Syncing…",
-    synced: "Up to date.",
-    offline: "Offline — changes will sync when you reconnect.",
-    error: "Sync problem — will retry.",
-  };
-
   /** The server copy replaced local state (another browser changed it, or first sign-in). */
   function applyRemoteState(next: StargateState, previous: StargateState, firstLink: boolean) {
     try {
@@ -336,7 +319,7 @@
     }
     doc = next;
     if (!doc.workspaces.some((w) => w.id === activeId)) activeId = resolveActiveWorkspace(doc)?.id ?? "";
-    if (firstLink) showToast("Loaded the data synced to your account.", previous);
+    if (firstLink) showToast(t.toast.syncLoaded, previous);
   }
 
   function startSync(userId: string) {
@@ -350,7 +333,7 @@
       onRemoteState: applyRemoteState,
       onStatus: (status, message) => {
         syncStatus = status;
-        syncMessage = message ?? null;
+        syncMessage = message === SYNC_CONFLICT_MESSAGE ? t.syncConflict : (message ?? null);
       },
     });
     void syncEngine.start();
@@ -396,7 +379,7 @@
     try {
       await signIn(provider);
     } catch (err) {
-      showToast(err instanceof Error ? `Sign-in failed: ${err.message}` : "Sign-in failed.");
+      showToast(t.toast.signInFailed(err instanceof Error ? err.message : undefined));
     }
   }
 
@@ -404,7 +387,7 @@
     try {
       await signOut();
     } catch (err) {
-      showToast(err instanceof Error ? `Sign-out failed: ${err.message}` : "Sign-out failed.");
+      showToast(t.toast.signOutFailed(err instanceof Error ? err.message : undefined));
     }
   }
 
@@ -460,10 +443,10 @@
         storageError = null;
       } catch (err) {
         pendingSave = next;
-        storageError = err instanceof Error ? err.message : "Could not save your changes.";
+        storageError = errorText(err, t.errors.saveFailed);
       }
     } catch (err) {
-      storageError = err instanceof Error ? err.message : "Could not re-compress the background image.";
+      storageError = errorText(err, t.errors.recompressFailed);
     } finally {
       recompressing = false;
     }
@@ -510,7 +493,7 @@
   // ---------- search, suggestions & quick actions ----------
 
   type Result = {
-    group: "Web" | "Links" | "Actions";
+    group: "web" | "links" | "actions";
     label: string;
     sub?: string;
     icon?: string;
@@ -529,9 +512,9 @@
     if (q) {
       const raw = query.trim();
       out.push({
-        group: "Web",
+        group: "web",
         icon: "globe",
-        label: `Search ${ENGINE_LABEL[doc.settings.searchEngine]} for “${raw}”`,
+        label: t.search.webFor(ENGINE_LABEL[doc.settings.searchEngine], raw),
         run: () => openUrl(engineUrl(doc.settings.searchEngine, raw)),
       });
     }
@@ -541,7 +524,7 @@
         for (const b of c.blocks) {
           for (const l of b.links) {
             if (!q || `${l.title} ${l.url}`.toLowerCase().includes(q)) {
-              links.push({ group: "Links", link: l, label: l.title, sub: `${w.icon} ${b.title}`, run: () => openUrl(l.url) });
+              links.push({ group: "links", link: l, label: l.title, sub: `${w.icon} ${b.title}`, run: () => openUrl(l.url) });
             }
           }
         }
@@ -551,20 +534,20 @@
     if (withActions) {
       const actions: Result[] = [
         ...doc.workspaces.map((w, i) => ({
-          group: "Actions" as const,
+          group: "actions" as const,
           icon: "chevR",
-          label: `Go to ${w.icon} ${w.name}`,
+          label: t.actions.goTo(`${w.icon} ${w.name}`),
           kbd: i < 9 ? `Alt ${i + 1}` : undefined,
           run: () => selectWorkspace(w.id),
         })),
-        { group: "Actions", icon: "grid", label: "Show links", run: () => setView("links") },
-        { group: "Actions", icon: "board", label: "Show kanban", run: () => setView("kanban") },
-        { group: "Actions", icon: "plus", label: "New workspace", run: createWorkspace },
-        { group: "Actions", icon: "pencil", label: "Edit this workspace", run: () => (sheet = "workspace") },
-        { group: "Actions", icon: "moon", label: "Switch theme", run: cycleTheme },
-        { group: "Actions", icon: "sliders", label: "Open settings", run: () => (sheet = "settings") },
-        { group: "Actions", icon: "download", label: "Export backup", run: onExport },
-        { group: "Actions", icon: "folder", label: "Import browser bookmarks", run: onImportBookmarks },
+        { group: "actions", icon: "grid", label: t.actions.showLinks, run: () => setView("links") },
+        { group: "actions", icon: "board", label: t.actions.showKanban, run: () => setView("kanban") },
+        { group: "actions", icon: "plus", label: t.actions.newWorkspace, run: createWorkspace },
+        { group: "actions", icon: "pencil", label: t.actions.editWorkspace, run: () => (sheet = "workspace") },
+        { group: "actions", icon: "moon", label: t.actions.switchTheme, run: cycleTheme },
+        { group: "actions", icon: "sliders", label: t.actions.openSettings, run: () => (sheet = "settings") },
+        { group: "actions", icon: "download", label: t.actions.exportBackup, run: onExport },
+        { group: "actions", icon: "folder", label: t.actions.importBookmarks, run: onImportBookmarks },
       ];
       out.push(...actions.filter((a) => !q || a.label.toLowerCase().includes(q)));
     }
@@ -679,7 +662,7 @@
           const favicon = await browserCodec.normalizeFavicon(dataUrl);
           commit(setFavicon(doc, wsId, columnId, blockId, linkId, favicon));
         } catch {
-          showToast("That image can't be used as an icon (max 8 KB after scaling).");
+          showToast(t.errors["favicon-too-large"]);
         }
       };
       reader.readAsDataURL(file);
@@ -704,13 +687,13 @@
         try {
           const compressed = await browserCodec.compressImage(dataUrl);
           commit(setBackground(doc, wsId, { dataUrl: compressed, alpha }));
-          showToast(`Background set (${formatBytes(compressed.length)})`);
+          showToast(t.toast.backgroundSet(formatBytes(compressed.length)));
         } catch (err) {
           const limit = Math.round(MAX_BACKGROUND_BASE64 / 1024);
           const message =
-            err instanceof Error && err.message.includes("too large")
-              ? err.message
-              : `That image couldn't be used as a background (max ${limit} KB after compression).`;
+            err instanceof StargateError && err.code === "background-too-large"
+              ? t.errors[err.code]
+              : t.errors.backgroundUnusable(limit);
           showToast(message);
         }
       };
@@ -729,7 +712,7 @@
   function onRemoveBackground() {
     const wsId = active?.id;
     if (!wsId) return;
-    commitWithUndo(removeBackground(doc, wsId), "Background removed");
+    commitWithUndo(removeBackground(doc, wsId), t.toast.backgroundRemoved);
   }
 
   // ---------- layout settings ----------
@@ -812,18 +795,18 @@
         try {
           imported = importState(text);
         } catch (err) {
-          showToast(err instanceof Error ? err.message : "Could not import this file.");
+          showToast(errorText(err, t.errors.importFailed));
           return;
         }
         confirmDialog = {
-          title: "Replace all your data?",
-          text: `This file has ${imported.workspaces.length} ${imported.workspaces.length === 1 ? "workspace" : "workspaces"}. They will replace everything you have now. Export a backup first if you might want it back.`,
-          ok: "Replace",
+          title: t.confirmImport.title,
+          text: t.confirmImport.text(imported.workspaces.length),
+          ok: t.confirmImport.ok,
           run: () => {
             sheet = null;
             activeId = resolveActiveWorkspace(imported)?.id ?? "";
             commit(imported);
-            showToast("Data restored from file");
+            showToast(t.toast.dataRestored);
           },
         };
       };
@@ -842,18 +825,18 @@
     input.value = ""; // allow re-picking the same file after a cancel
     if (!file) return;
     const reader = new FileReader();
-    reader.onerror = () => showToast("Could not read this file.");
+    reader.onerror = () => showToast(t.errors.fileUnreadable);
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
       let tree: BookmarksTree;
       try {
         tree = parseBookmarksHtml(text);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Could not read this bookmarks file.");
+        showToast(errorText(err, t.errors.bookmarksUnreadable));
         return;
       }
       if (tree.entries.length === 0) {
-        showToast("No bookmarks found in this file.");
+        showToast(t.toast.noBookmarks);
         return;
       }
       sheet = null;
@@ -905,19 +888,17 @@
     const created = next.workspaces.filter((w) => !known.has(w.id));
     closeBookmarksPicker();
     if (created.length === 0) {
-      showToast("Nothing to import in the selected folders.");
+      showToast(t.toast.nothingToImport);
       return;
     }
     commit(next);
     activeId = created[0].id;
     view = "links";
-    showToast(`Added ${created.length} ${created.length === 1 ? "workspace" : "workspaces"} from your bookmarks`);
+    showToast(t.toast.bookmarksAdded(created.length));
   }
 
   function bookmarksFolderSummary(row: BookmarkFolderRow): string {
-    return `${row.links} ${row.links === 1 ? "link" : "links"} · ${row.subfolders} ${
-      row.subfolders === 1 ? "folder" : "folders"
-    }`;
+    return t.bookmarks.folderSummary(row.links, row.subfolders);
   }
 
   // ---------- workspaces ----------
@@ -925,7 +906,7 @@
   function createWorkspace() {
     const n = doc.workspaces.length;
     const next = addWorkspace(doc, {
-      name: "New workspace",
+      name: t.seed.newWorkspace,
       icon: WORKSPACE_ICONS[n % WORKSPACE_ICONS.length],
       color: WORKSPACE_COLORS[n % WORKSPACE_COLORS.length],
     });
@@ -953,7 +934,7 @@
     if (next === doc) return;
     sheet = null;
     if (activeId === ws.id) activeId = next.workspaces[0]?.id ?? "";
-    commitWithUndo(next, `Deleted workspace “${ws.name}”`);
+    commitWithUndo(next, t.toast.deletedWorkspace(ws.name));
   }
 
   // ---------- inline add & rename ----------
@@ -1041,12 +1022,12 @@
 
   function onDeleteColumn(column: Column) {
     if (!active) return;
-    commitWithUndo(deleteColumn(doc, active.id, column.id), `Deleted column “${column.title}”`);
+    commitWithUndo(deleteColumn(doc, active.id, column.id), t.toast.deletedColumn(column.title));
   }
 
   function onDeleteBlock(column: Column, block: Block) {
     if (!active) return;
-    commitWithUndo(deleteBlock(doc, active.id, column.id, block.id), `Deleted block “${block.title}”`);
+    commitWithUndo(deleteBlock(doc, active.id, column.id, block.id), t.toast.deletedBlock(block.title));
   }
 
   function onToggleCollapse(column: Column, block: Block) {
@@ -1073,7 +1054,7 @@
     if (!active || settingsColumnId === null || settingsBlockId === null) return;
     const column = active.columns.find((c) => c.id === settingsColumnId);
     const block = column?.blocks.find((b) => b.id === settingsBlockId);
-    const title = settingsTitle.trim() || block?.title || "Untitled block";
+    const title = settingsTitle.trim() || block?.title || t.seed.untitledBlock;
     let next = renameBlock(doc, active.id, settingsColumnId, settingsBlockId, title);
     next = updateBlockSettings(next, active.id, settingsColumnId, settingsBlockId, {
       description: settingsDescription.trim(),
@@ -1180,7 +1161,7 @@
   function onDeleteLink(columnId: string, blockId: string, link: Link) {
     if (!active) return;
     if (linkSettingsLinkId === link.id) closeLinkSettings();
-    commitWithUndo(deleteLink(doc, active.id, columnId, blockId, link.id), `Deleted “${link.title}”`);
+    commitWithUndo(deleteLink(doc, active.id, columnId, blockId, link.id), t.toast.deletedLink(link.title));
   }
 
   // ---------- kanban ----------
@@ -1203,9 +1184,9 @@
 
   function dueLabel(due: string): string {
     const status = dueStatus(due);
-    const date = new Date(`${due}T00:00:00`).toLocaleDateString("en", { month: "short", day: "numeric" });
-    if (status === "today") return "Today";
-    if (status === "overdue") return `Overdue · ${date}`;
+    const date = new Date(`${due}T00:00:00`).toLocaleDateString(t.locale, { month: "short", day: "numeric" });
+    if (status === "today") return t.kanban.today;
+    if (status === "overdue") return t.kanban.overdue(date);
     return date;
   }
 
@@ -1230,7 +1211,7 @@
   function onDeleteKanbanColumn(column: KanbanColumn) {
     if (!active) return;
     if (active.kanban.columns.length <= 1) return;
-    commitWithUndo(deleteKanbanColumn(doc, active.id, column.id), `Deleted column “${column.title}”`);
+    commitWithUndo(deleteKanbanColumn(doc, active.id, column.id), t.toast.deletedColumn(column.title));
   }
 
   function beginEditTitle(column: KanbanColumn, task: Task) {
@@ -1313,7 +1294,7 @@
       editingTaskId = null;
       editingColumnId = null;
     }
-    commitWithUndo(deleteTask(doc, active.id, column.id, task.id), `Deleted task “${task.title}”`);
+    commitWithUndo(deleteTask(doc, active.id, column.id, task.id), t.toast.deletedTask(task.title));
   }
 
   // ---------- drag & drop ----------
@@ -1501,11 +1482,11 @@
 {#snippet resultList(list: Result[], selected: number, onpick: (r: Result) => void)}
   {#each list as r, i (i)}
     {#if i === 0 || list[i - 1].group !== r.group}
-      <div class="result-group">{r.group}</div>
+      <div class="result-group">{t.search.groups[r.group]}</div>
     {/if}
     {@render resultRow(r, i === selected, () => onpick(r))}
   {:else}
-    <div class="result-group">No matches</div>
+    <div class="result-group">{t.search.noMatches}</div>
   {/each}
 {/snippet}
 
@@ -1536,12 +1517,12 @@
           onkeydown={onSearchKeydown}
           onfocus={() => (searchFocused = true)}
           onblur={() => (searchFocused = false)}
-          placeholder="Search the web or your links"
-          aria-label="Search"
+          placeholder={t.search.placeholder}
+          aria-label={t.search.label}
           autocomplete="off"
         />
         <select
-          aria-label="Search engine"
+          aria-label={t.search.engineLabel}
           value={doc.settings.searchEngine}
           onchange={(e) => commit(setSearchEngine(doc, (e.currentTarget as HTMLSelectElement).value as SearchEngine))}
         >
@@ -1556,14 +1537,14 @@
         {/if}
       </form>
       <div class="hero-meta">
-        <span>{@html icon("link")} {linkCount(active)} links</span>
-        <span>{@html icon("board")} {openTaskCount(active)} open tasks</span>
+        <span>{@html icon("link")} {t.hero.links(linkCount(active))}</span>
+        <span>{@html icon("board")} {t.hero.openTasks(openTaskCount(active))}</span>
         {#if dueOrOverdueCount(active) > 0}
           <button class="due-alert" onclick={() => setView("kanban")}>
-            {@html icon("cal")} {dueOrOverdueCount(active)} due or overdue
+            {@html icon("cal")} {t.hero.dueOrOverdue(dueOrOverdueCount(active))}
           </button>
         {/if}
-        <span class="hint-keys"><kbd>/</kbd> search · <kbd>{MOD_KEY} K</kbd> quick actions</span>
+        <span class="hint-keys"><kbd>/</kbd> {t.hero.hintSearch} · <kbd>{MOD_KEY} K</kbd> {t.hero.hintActions}</span>
       </div>
     </header>
   {/if}
@@ -1576,18 +1557,18 @@
           <span class="notice-msg">{storageError}</span>
           {#if canRecompress}
             <button class="btn sm" onclick={onRecompress} disabled={recompressing}>
-              {recompressing ? "Re-compressing…" : "Re-compress backgrounds"}
+              {recompressing ? t.notices.recompressing : t.notices.recompress}
             </button>
           {/if}
-          <button class="btn sm" onclick={onExport}>{@html icon("download")} Export</button>
-          <button class="icon-btn" aria-label="Dismiss" onclick={() => (storageError = null)}>{@html icon("x")}</button>
+          <button class="btn sm" onclick={onExport}>{@html icon("download")} {t.notices.export}</button>
+          <button class="icon-btn" aria-label={t.notices.dismiss} onclick={() => (storageError = null)}>{@html icon("x")}</button>
         </div>
       {/if}
       {#if recovered}
         <div class="notice info" role="status">
           {@html icon("undo")}
-          <span class="notice-msg">Your data was recovered from a backup. Re-add any background images.</span>
-          <button class="icon-btn" aria-label="Dismiss" onclick={() => (recovered = false)}>{@html icon("x")}</button>
+          <span class="notice-msg">{t.notices.recovered}</span>
+          <button class="icon-btn" aria-label={t.notices.dismiss} onclick={() => (recovered = false)}>{@html icon("x")}</button>
         </div>
       {/if}
     </div>
@@ -1609,7 +1590,7 @@
               class="col"
               class:drop-over={dropTarget === `col:${column.id}`}
               role="group"
-              aria-label={`${column.title} column`}
+              aria-label={t.board.columnLabel(column.title)}
               ondragover={(e) => columnDragOver(e, column.id)}
               ondrop={(e) => dropOnColumn(e, column, columnIndex)}
             >
@@ -1626,18 +1607,18 @@
                     bind:value={renameDraft}
                     onkeydown={onRenameKeydown}
                     onblur={commitRename}
-                    aria-label="Column title"
+                    aria-label={t.board.columnTitle}
                     use:autofocus={true}
                   />
                 {:else}
                   <button
                     class="col-title"
-                    title="Click to rename · drag to reorder"
+                    title={t.board.renameHint}
                     onclick={() => startRename("column", column.id, column.title)}
                   >{column.title}</button>
                 {/if}
                 <div class="hover-tools">
-                  <button class="icon-btn danger" title="Delete column" onclick={() => onDeleteColumn(column)}>{@html icon("trash")}</button>
+                  <button class="icon-btn danger" title={t.board.deleteColumn} onclick={() => onDeleteColumn(column)}>{@html icon("trash")}</button>
                 </div>
               </header>
 
@@ -1660,7 +1641,7 @@
                   >
                     <button
                       class="icon-btn collapse-toggle"
-                      title={collapsed ? "Expand block" : "Collapse block"}
+                      title={collapsed ? t.board.expandBlock : t.board.collapseBlock}
                       aria-expanded={!collapsed}
                       onclick={() => onToggleCollapse(column, block)}
                     >
@@ -1669,8 +1650,8 @@
                     <h3>{block.title}</h3>
                     {#if collapsed}<span class="count">{block.links.length}</span>{/if}
                     <div class="hover-tools">
-                      <button class="icon-btn" title="Block settings" onclick={() => openBlockSettings(column, block)}>{@html icon("sliders")}</button>
-                      <button class="icon-btn danger" title="Delete block" onclick={() => onDeleteBlock(column, block)}>{@html icon("x")}</button>
+                      <button class="icon-btn" title={t.board.blockSettings} onclick={() => openBlockSettings(column, block)}>{@html icon("sliders")}</button>
+                      <button class="icon-btn danger" title={t.board.deleteBlock} onclick={() => onDeleteBlock(column, block)}>{@html icon("x")}</button>
                     </div>
                   </header>
 
@@ -1705,8 +1686,8 @@
                             {/if}
                           </a>
                           <div class="hover-tools">
-                            <button class="icon-btn" title="Edit link" onclick={() => openLinkSettings(column, block, link)}>{@html icon("sliders")}</button>
-                            <button class="icon-btn danger" title="Delete link" onclick={() => onDeleteLink(column.id, block.id, link)}>{@html icon("x")}</button>
+                            <button class="icon-btn" title={t.board.editLink} onclick={() => openLinkSettings(column, block, link)}>{@html icon("sliders")}</button>
+                            <button class="icon-btn danger" title={t.board.deleteLink} onclick={() => onDeleteLink(column.id, block.id, link)}>{@html icon("x")}</button>
                           </div>
                         </div>
                       {/each}
@@ -1716,16 +1697,16 @@
                       <form class="add-form" onsubmit={(e) => addLinkForm(e, column, block)}>
                         <input
                           class="inline-input"
-                          placeholder="Title https://… or just a domain"
-                          aria-label="New link"
+                          placeholder={t.board.newLinkPlaceholder}
+                          aria-label={t.board.newLink}
                           onblur={onAddBlur}
                           onkeydown={onAddKeydown}
                           use:autofocus
                         />
-                        <button class="icon-btn" type="submit" title="Add link">{@html icon("plus")}</button>
+                        <button class="icon-btn" type="submit" title={t.board.addLink}>{@html icon("plus")}</button>
                       </form>
                     {:else}
-                      <button class="ghost-add" onclick={() => startAdding("link", block.id)}>{@html icon("plus")} Add link</button>
+                      <button class="ghost-add" onclick={() => startAdding("link", block.id)}>{@html icon("plus")} {t.board.addLink}</button>
                     {/if}
                   {/if}
                 </article>
@@ -1735,16 +1716,16 @@
                 <form class="add-form" onsubmit={(e) => addBlockForm(e, column)}>
                   <input
                     class="inline-input"
-                    placeholder="Block title"
-                    aria-label="New block"
+                    placeholder={t.board.blockTitle}
+                    aria-label={t.board.newBlock}
                     onblur={onAddBlur}
                     onkeydown={onAddKeydown}
                     use:autofocus
                   />
-                  <button class="icon-btn" type="submit" title="Add block">{@html icon("plus")}</button>
+                  <button class="icon-btn" type="submit" title={t.board.addBlock}>{@html icon("plus")}</button>
                 </form>
               {:else}
-                <button class="ghost-add col-add" onclick={() => startAdding("block", column.id)}>{@html icon("plus")} Add block</button>
+                <button class="ghost-add col-add" onclick={() => startAdding("block", column.id)}>{@html icon("plus")} {t.board.addBlock}</button>
               {/if}
             </section>
           {/each}
@@ -1754,17 +1735,17 @@
               <form class="add-form" onsubmit={addColumnForm}>
                 <input
                   class="inline-input"
-                  placeholder="Column title"
-                  aria-label="New column"
+                  placeholder={t.board.columnTitle}
+                  aria-label={t.board.newColumn}
                   onblur={onAddBlur}
                   onkeydown={onAddKeydown}
                   use:autofocus
                 />
-                <button class="icon-btn" type="submit" title="Add column">{@html icon("plus")}</button>
+                <button class="icon-btn" type="submit" title={t.board.addColumn}>{@html icon("plus")}</button>
               </form>
             </div>
           {:else}
-            <button class="add-tile" onclick={() => startAdding("column", active.id)}>{@html icon("plus")}<span>New column</span></button>
+            <button class="add-tile" onclick={() => startAdding("column", active.id)}>{@html icon("plus")}<span>{t.board.newColumn}</span></button>
           {/if}
         </div>
       {:else}
@@ -1774,7 +1755,7 @@
               class="kanban-col"
               class:drop-over={dropTarget === `kcol:${column.id}`}
               role="group"
-              aria-label={`${column.title} column`}
+              aria-label={t.board.columnLabel(column.title)}
               ondragover={(e) => kanbanColumnDragOver(e, column.id)}
               ondrop={(e) => dropOnKanbanColumn(e, column, columnIndex)}
             >
@@ -1791,21 +1772,21 @@
                     bind:value={renameDraft}
                     onkeydown={onRenameKeydown}
                     onblur={commitRename}
-                    aria-label="Column title"
+                    aria-label={t.board.columnTitle}
                     use:autofocus={true}
                   />
                 {:else}
                   <button
                     type="button"
                     class="kanban-col-title"
-                    title="Click to rename · drag to reorder"
+                    title={t.board.renameHint}
                     onclick={() => startRename("kanbanColumn", column.id, column.title)}
                   >{column.title}</button>
                 {/if}
                 <span class="count">{column.tasks.length}</span>
                 {#if active.kanban.columns.length > 1}
                   <div class="hover-tools">
-                    <button class="icon-btn danger" title="Delete column" onclick={() => onDeleteKanbanColumn(column)}>{@html icon("x")}</button>
+                    <button class="icon-btn danger" title={t.board.deleteColumn} onclick={() => onDeleteKanbanColumn(column)}>{@html icon("x")}</button>
                   </div>
                 {/if}
               </header>
@@ -1832,13 +1813,13 @@
                           bind:value={titleDraft}
                           onkeydown={onTitleKeydown}
                           onblur={commitTitle}
-                          aria-label="Task title"
+                          aria-label={t.kanban.taskTitle}
                           use:autofocus
                         />
                       {:else}
-                        <button class="task-title" title="Click to edit" onclick={() => beginEditTitle(column, task)}>{task.title}</button>
+                        <button class="task-title" title={t.kanban.clickToEdit} onclick={() => beginEditTitle(column, task)}>{task.title}</button>
                       {/if}
-                      <button class="icon-btn" title="Notes & due date" onclick={() => toggleEditor(column, task)}>{@html icon("pencil")}</button>
+                      <button class="icon-btn" title={t.kanban.notesAndDue} onclick={() => toggleEditor(column, task)}>{@html icon("pencil")}</button>
                     </div>
 
                     {#if !open}
@@ -1847,7 +1828,7 @@
                           {#if task.notes.trim()}
                             {task.notes.split("\n")[0]}
                           {:else}
-                            <span class="muted">+ note</span>
+                            <span class="muted">{t.kanban.addNote}</span>
                           {/if}
                         </button>
                         {#if task.due}
@@ -1862,24 +1843,24 @@
                         <textarea
                           bind:value={notesDraft}
                           onblur={commitNotes}
-                          placeholder="Notes…"
+                          placeholder={t.kanban.notesPlaceholder}
                           rows={3}
-                          aria-label="Notes"
+                          aria-label={t.kanban.notes}
                           use:autofocus
                         ></textarea>
                         <div class="editor-row">
                           <label class="due-field">
                             {@html icon("cal")}
-                            <span>Due</span>
+                            <span>{t.kanban.due}</span>
                             <input type="date" bind:value={dueDraft} onchange={onDueChange} />
                           </label>
                           {#if task.due}
-                            <button class="btn sm ghost" onclick={clearDue}>Clear</button>
+                            <button class="btn sm ghost" onclick={clearDue}>{t.kanban.clear}</button>
                           {/if}
                         </div>
                         <div class="editor-row">
-                          <button class="btn sm danger" onclick={() => onDeleteTask(column, task)}>{@html icon("trash")} Delete task</button>
-                          <button class="btn sm push" onclick={() => toggleEditor(column, task)}>Done</button>
+                          <button class="btn sm danger" onclick={() => onDeleteTask(column, task)}>{@html icon("trash")} {t.kanban.deleteTask}</button>
+                          <button class="btn sm push" onclick={() => toggleEditor(column, task)}>{t.kanban.done}</button>
                         </div>
                       </div>
                     {/if}
@@ -1891,16 +1872,16 @@
                 <form class="add-form" onsubmit={(e) => onAddTask(e, column)}>
                   <input
                     class="inline-input"
-                    placeholder="Task title"
-                    aria-label="New task"
+                    placeholder={t.kanban.taskTitle}
+                    aria-label={t.kanban.newTask}
                     onblur={onAddBlur}
                     onkeydown={onAddKeydown}
                     use:autofocus
                   />
-                  <button class="icon-btn" type="submit" title="Add task">{@html icon("plus")}</button>
+                  <button class="icon-btn" type="submit" title={t.kanban.addTask}>{@html icon("plus")}</button>
                 </form>
               {:else}
-                <button class="ghost-add" onclick={() => startAdding("task", column.id)}>{@html icon("plus")} Add task</button>
+                <button class="ghost-add" onclick={() => startAdding("task", column.id)}>{@html icon("plus")} {t.kanban.addTask}</button>
               {/if}
             </section>
           {/each}
@@ -1910,17 +1891,17 @@
               <form class="add-form" onsubmit={onAddKanbanColumn}>
                 <input
                   class="inline-input"
-                  placeholder="Column title"
-                  aria-label="New column"
+                  placeholder={t.board.columnTitle}
+                  aria-label={t.board.newColumn}
                   onblur={onAddBlur}
                   onkeydown={onAddKeydown}
                   use:autofocus
                 />
-                <button class="icon-btn" type="submit" title="Add column">{@html icon("plus")}</button>
+                <button class="icon-btn" type="submit" title={t.board.addColumn}>{@html icon("plus")}</button>
               </form>
             </div>
           {:else}
-            <button class="add-tile kanban-add-tile" onclick={() => startAdding("kanbanColumn", active.id)}>{@html icon("plus")}<span>New column</span></button>
+            <button class="add-tile kanban-add-tile" onclick={() => startAdding("kanbanColumn", active.id)}>{@html icon("plus")}<span>{t.board.newColumn}</span></button>
           {/if}
         </div>
       {/if}
@@ -1928,7 +1909,7 @@
   </main>
 </div>
 
-<nav class="dock" aria-label="Workspaces and tools">
+<nav class="dock" aria-label={t.dock.label}>
   {#each doc.workspaces as ws, wsIndex (ws.id)}
     <button
       class="dock-ws"
@@ -1952,48 +1933,58 @@
       <span class="dock-tip">{ws.name}{wsIndex < 9 ? ` · Alt ${wsIndex + 1}` : ""}</span>
     </button>
   {/each}
-  <button class="dock-ws dock-add" title="New workspace" onclick={createWorkspace}>{@html icon("plus")}</button>
+  <button class="dock-ws dock-add" title={t.dock.newWorkspace} onclick={createWorkspace}>{@html icon("plus")}</button>
   <span class="dock-sep"></span>
-  <button class="dock-btn" class:active={view === "links"} title="Links" aria-pressed={view === "links"} onclick={() => setView("links")}>{@html icon("grid")}</button>
-  <button class="dock-btn" class:active={view === "kanban"} title="Kanban" aria-pressed={view === "kanban"} onclick={() => setView("kanban")}>
+  <button class="dock-btn" class:active={view === "links"} title={t.dock.links} aria-pressed={view === "links"} onclick={() => setView("links")}>{@html icon("grid")}</button>
+  <button class="dock-btn" class:active={view === "kanban"} title={t.dock.kanban} aria-pressed={view === "kanban"} onclick={() => setView("kanban")}>
     {@html icon("board")}
     {#if active && openTaskCount(active) > 0}<span class="dock-badge">{openTaskCount(active)}</span>{/if}
   </button>
   <span class="dock-sep"></span>
-  <button class="dock-btn" title="Workspace settings" onclick={() => (sheet = "workspace")}>{@html icon("pencil")}</button>
-  <button class="dock-btn" title={`Quick actions (${MOD_KEY} K)`} onclick={openPalette}>{@html icon("command")}</button>
-  <button class="dock-btn" title={`Theme: ${THEME_LABEL[doc.settings.theme]}`} onclick={cycleTheme}>{@html icon(THEME_ICON[doc.settings.theme])}</button>
-  <button class="dock-btn" title="Settings" onclick={() => (sheet = "settings")}>{@html icon("sliders")}</button>
+  <button class="dock-btn" title={t.dock.workspaceSettings} onclick={() => (sheet = "workspace")}>{@html icon("pencil")}</button>
+  <button class="dock-btn" title={t.dock.quickActions(`${MOD_KEY} K`)} onclick={openPalette}>{@html icon("command")}</button>
+  <button class="dock-btn" title={t.dock.theme(t.theme[doc.settings.theme])} onclick={cycleTheme}>{@html icon(THEME_ICON[doc.settings.theme])}</button>
+  <button class="dock-btn" title={t.dock.settings} onclick={() => (sheet = "settings")}>{@html icon("sliders")}</button>
 </nav>
 
 <input type="file" accept=".html,.htm" bind:this={bookmarksInput} onchange={onBookmarksFile} hidden />
 
 {#if sheet === "settings" && active}
   <div class="scrim sheet-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (sheet = null)}>
-    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
+    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label={t.settings.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Settings</h2>
-        <button class="icon-btn" aria-label="Close" onclick={() => (sheet = null)}>{@html icon("x")}</button>
+        <h2>{t.settings.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={() => (sheet = null)}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         <section class="section">
-          <div class="section-title">Appearance</div>
+          <div class="section-title">{t.settings.appearance}</div>
           <div class="setting">
-            <span>Theme</span>
+            <span>{t.settings.language}</span>
             <div class="seg">
-              {#each THEME_CYCLE as theme (theme)}
-                <button type="button" class:sel={doc.settings.theme === theme} onclick={() => commit(setTheme(doc, theme))}>
-                  {@html icon(THEME_ICON[theme])}{THEME_LABEL[theme]}
+              {#each LANGUAGE_OPTIONS as option (option.value)}
+                <button type="button" class:sel={language === option.value} onclick={() => commit(setLanguage(doc, option.value))}>
+                  {option.label}
                 </button>
               {/each}
             </div>
           </div>
           <div class="setting">
-            <span>Block titles</span>
+            <span>{t.settings.theme}</span>
+            <div class="seg">
+              {#each THEME_CYCLE as theme (theme)}
+                <button type="button" class:sel={doc.settings.theme === theme} onclick={() => commit(setTheme(doc, theme))}>
+                  {@html icon(THEME_ICON[theme])}{t.theme[theme]}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="setting">
+            <span>{t.settings.blockTitles}</span>
             <div class="seg">
               {#each BLOCK_TITLE_SIZE_OPTIONS as size (size)}
                 <button type="button" class:sel={blockTitleSize === size} onclick={() => onBlockTitleSize(size)}>
-                  {BLOCK_TITLE_SIZE_LABEL[size]}
+                  {t.titleSize[size]}
                 </button>
               {/each}
             </div>
@@ -2001,29 +1992,29 @@
         </section>
 
         <section class="section">
-          <div class="section-title">Layout · {active.icon} {active.name}</div>
+          <div class="section-title">{t.settings.layout(`${active.icon} ${active.name}`)}</div>
           <div class="setting">
-            <span>Columns</span>
+            <span>{t.settings.columns}</span>
             <div class="stepper">
-              <button type="button" aria-label="Fewer columns" onclick={() => setColumnCount(workspaceLayout.columnCount - 1)}>−</button>
-              <output>{workspaceLayout.columnCount || "Auto"}</output>
-              <button type="button" aria-label="More columns" onclick={() => setColumnCount(workspaceLayout.columnCount + 1)}>+</button>
+              <button type="button" aria-label={t.settings.fewerColumns} onclick={() => setColumnCount(workspaceLayout.columnCount - 1)}>−</button>
+              <output>{workspaceLayout.columnCount || t.settings.auto}</output>
+              <button type="button" aria-label={t.settings.moreColumns} onclick={() => setColumnCount(workspaceLayout.columnCount + 1)}>+</button>
             </div>
           </div>
           <div class="setting">
-            <span>Full width</span>
+            <span>{t.settings.fullWidth}</span>
             <button
               type="button"
               class="switch"
               class:on={workspaceLayout.fluid}
               role="switch"
               aria-checked={workspaceLayout.fluid}
-              aria-label="Full width"
+              aria-label={t.settings.fullWidth}
               onclick={toggleFluid}
             ></button>
           </div>
           <label class="field">
-            <span class="setting-label">Gap between columns</span>
+            <span class="setting-label">{t.settings.columnGap}</span>
             <span class="range-row">
               <input type="range" min="0" max="48" step="2" value={workspaceLayout.columnGap} oninput={onColumnGapChange} />
               <output>{workspaceLayout.columnGap}px</output>
@@ -2032,9 +2023,9 @@
         </section>
 
         <section class="section">
-          <div class="section-title">Search</div>
+          <div class="section-title">{t.settings.search}</div>
           <div class="setting">
-            <span>Default engine</span>
+            <span>{t.settings.defaultEngine}</span>
             <div class="seg">
               {#each ENGINE_OPTIONS as engine (engine)}
                 <button type="button" class:sel={doc.settings.searchEngine === engine} onclick={() => commit(setSearchEngine(doc, engine))}>
@@ -2046,24 +2037,24 @@
         </section>
 
         <section class="section">
-          <div class="section-title">Favicons</div>
+          <div class="section-title">{t.settings.favicons}</div>
           <div class="setting">
-            <span>Fetch site icons from</span>
+            <span>{t.settings.fetchIconsFrom}</span>
             <div class="seg">
               {#each FAVICON_SOURCE_OPTIONS as source (source)}
                 <button type="button" class:sel={doc.settings.faviconSource === source} onclick={() => commit(setFaviconSource(doc, source))}>
-                  {FAVICON_SOURCE_LABEL[source]}
+                  {t.faviconSource[source]}
                 </button>
               {/each}
             </div>
           </div>
-          <p class="help-note">Off by default: the provider would see the list of sites you bookmark. Letter tiles always work offline.</p>
+          <p class="help-note">{t.settings.faviconsNote}</p>
         </section>
 
         <section class="section">
-          <div class="section-title">On startup</div>
+          <div class="section-title">{t.settings.onStartup}</div>
           <div class="setting">
-            <span>Open</span>
+            <span>{t.settings.open}</span>
             <div class="seg">
               {#each OPEN_WORKSPACE_OPTIONS as mode (mode)}
                 <button
@@ -2071,7 +2062,7 @@
                   class:sel={(doc.settings.openWorkspace ?? DEFAULT_OPEN_WORKSPACE) === mode}
                   onclick={() => onOpenWorkspace(mode)}
                 >
-                  {OPEN_WORKSPACE_LABEL[mode]}
+                  {t.openWorkspace[mode]}
                 </button>
               {/each}
             </div>
@@ -2080,51 +2071,51 @@
 
         {#if syncConfigured}
           <section class="section">
-            <div class="section-title">Sync</div>
+            <div class="section-title">{t.settings.sync}</div>
             {#if account}
               <div class="setting">
-                <span>Signed in{account.email ? ` as ${account.email}` : ""}</span>
-                <button type="button" class="btn sm" onclick={onSignOut}>Sign out</button>
+                <span>{t.settings.signedIn(account.email)}</span>
+                <button type="button" class="btn sm" onclick={onSignOut}>{t.settings.signOut}</button>
               </div>
               <p class="help-note" title={syncMessage ?? undefined}>
-                {SYNC_STATUS_LABEL[syncStatus]} Links, tasks and settings sync between your browsers; background images stay on this device.
+                {t.syncStatus[syncStatus]} {t.settings.syncedNote}
               </p>
             {:else}
               <div class="setting">
-                <span>Sign in with</span>
+                <span>{t.settings.signInWith}</span>
                 <div class="seg">
                   <button type="button" onclick={() => onSignIn("github")}>GitHub</button>
                   <button type="button" onclick={() => onSignIn("google")}>Google</button>
                 </div>
               </div>
               <p class="help-note">
-                Optional. Keeps links, tasks and settings in sync between your browsers. Background images stay on this device.
+                {t.settings.syncOptionalNote}
               </p>
             {/if}
           </section>
         {/if}
 
         <section class="section">
-          <div class="section-title">Your data</div>
-          <div class="meter" title={`${formatBytes(usage.totalBytes)} of ~5 MB`}>
+          <div class="section-title">{t.settings.yourData}</div>
+          <div class="meter" title={t.settings.usageOf(formatBytes(usage.totalBytes))}>
             <i class="meter-bg" style:width={`${(usage.backgroundBytes / STORAGE_CAP) * 100}%`}></i>
             <i class="meter-cfg" style:width={`${(usage.configBytes / STORAGE_CAP) * 100}%`}></i>
           </div>
           <div class="legend">
-            <span><i class="meter-bg"></i>Backgrounds {formatBytes(usage.backgroundBytes)}</span>
-            <span><i class="meter-cfg"></i>Links & tasks {formatBytes(usage.configBytes)}</span>
-            <span>of ~5 MB browser storage</span>
+            <span><i class="meter-bg"></i>{t.settings.backgrounds} {formatBytes(usage.backgroundBytes)}</span>
+            <span><i class="meter-cfg"></i>{t.settings.linksAndTasks} {formatBytes(usage.configBytes)}</span>
+            <span>{t.settings.ofBrowserStorage}</span>
           </div>
           <div class="data-actions">
-            <button class="btn" onclick={onExport}>{@html icon("download")} Export backup</button>
-            <button class="btn" onclick={onImport}>{@html icon("upload")} Restore from file</button>
-            <button class="btn" onclick={onImportBookmarks}>{@html icon("folder")} Import browser bookmarks</button>
+            <button class="btn" onclick={onExport}>{@html icon("download")} {t.settings.exportBackup}</button>
+            <button class="btn" onclick={onImport}>{@html icon("upload")} {t.settings.restoreFromFile}</button>
+            <button class="btn" onclick={onImportBookmarks}>{@html icon("folder")} {t.settings.importBookmarks}</button>
           </div>
           <p class="help-note">
             {#if account}
-              Background images live only in this browser; everything else is also synced to your account. Export a backup now and then.
+              {t.settings.dataNoteSynced}
             {:else}
-              Everything lives in this browser. In private/incognito windows it is temporary, and it isn't shared between browsers, so export a backup now and then.
+              {t.settings.dataNoteLocal}
             {/if}
           </p>
         </section>
@@ -2135,25 +2126,25 @@
 
 {#if sheet === "workspace" && active}
   <div class="scrim sheet-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (sheet = null)}>
-    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label="Workspace" tabindex="-1">
+    <div class="dialog sheet" role="dialog" aria-modal="true" aria-label={t.workspace.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Workspace</h2>
-        <button class="icon-btn" aria-label="Close" onclick={() => (sheet = null)}>{@html icon("x")}</button>
+        <h2>{t.workspace.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={() => (sheet = null)}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         <label class="field">
-          <span class="setting-label">Name</span>
+          <span class="setting-label">{t.workspace.name}</span>
           {#key active.id}
             <input
               value={active.name}
               onchange={onWorkspaceName}
               onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-              use:autofocus={active.name === "New workspace"}
+              use:autofocus={active.name === t.seed.newWorkspace}
             />
           {/key}
         </label>
         <div class="field">
-          <span class="setting-label">Icon</span>
+          <span class="setting-label">{t.workspace.icon}</span>
           <div class="emoji-grid">
             {#each WORKSPACE_ICONS as emoji (emoji)}
               <button type="button" class:sel={active.icon === emoji} onclick={() => onWorkspaceAppearance({ icon: emoji })}>{emoji}</button>
@@ -2161,7 +2152,7 @@
           </div>
         </div>
         <div class="field">
-          <span class="setting-label">Colour</span>
+          <span class="setting-label">{t.workspace.colour}</span>
           <div class="swatches">
             {#each WORKSPACE_COLORS as color (color)}
               <button
@@ -2176,26 +2167,26 @@
             <input
               type="color"
               value={active.color}
-              aria-label="Custom colour"
+              aria-label={t.workspace.customColour}
               onchange={(e) => onWorkspaceAppearance({ color: (e.currentTarget as HTMLInputElement).value })}
             />
           </div>
         </div>
         <div class="field">
-          <span class="setting-label">Background</span>
+          <span class="setting-label">{t.workspace.background}</span>
           <div class="bg-preview" style:background-image={active.background.dataUrl ? `url(${active.background.dataUrl})` : undefined}>
-            {#if !active.background.dataUrl}No background image{/if}
+            {#if !active.background.dataUrl}{t.workspace.noBackground}{/if}
           </div>
           <div class="editor-row">
             <button class="btn sm" onclick={onUploadBackground}>
-              {@html icon("image")} {active.background.dataUrl ? "Replace image" : "Upload image"}
+              {@html icon("image")} {active.background.dataUrl ? t.workspace.replaceImage : t.workspace.uploadImage}
             </button>
             {#if active.background.dataUrl}
-              <button class="btn sm danger" onclick={onRemoveBackground}>Remove</button>
+              <button class="btn sm danger" onclick={onRemoveBackground}>{t.common.remove}</button>
             {/if}
           </div>
           <span class="range-row">
-            <span class="help-note">Strength</span>
+            <span class="help-note">{t.workspace.strength}</span>
             <input
               type="range"
               min="0"
@@ -2204,18 +2195,18 @@
               value={active.background.alpha}
               oninput={onBackgroundAlpha}
               disabled={!active.background.dataUrl}
-              aria-label="Background strength"
+              aria-label={t.workspace.backgroundStrength}
             />
             <output>{active.background.alpha}%</output>
           </span>
-          <p class="help-note">Images are compressed in your browser to about 500 KB.</p>
+          <p class="help-note">{t.workspace.compressionNote}</p>
         </div>
       </div>
       <div class="dialog-foot">
         {#if doc.workspaces.length > 1}
-          <button class="btn danger push-right" onclick={() => onDeleteWorkspace(active)}>{@html icon("trash")} Delete workspace</button>
+          <button class="btn danger push-right" onclick={() => onDeleteWorkspace(active)}>{@html icon("trash")} {t.workspace.delete}</button>
         {/if}
-        <button class="btn primary" onclick={() => (sheet = null)}>Done</button>
+        <button class="btn primary" onclick={() => (sheet = null)}>{t.common.done}</button>
       </div>
     </div>
   </div>
@@ -2229,43 +2220,43 @@
       if (e.target === e.currentTarget) closeBlockSettings();
     }}
   >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Block settings" tabindex="-1">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label={t.blockSettings.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Block settings</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeBlockSettings}>{@html icon("x")}</button>
+        <h2>{t.blockSettings.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeBlockSettings}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         <label class="field">
-          <span class="setting-label">Title</span>
-          <input bind:value={settingsTitle} placeholder="Block title…" onkeydown={onBlockSettingsKeydown} use:autofocus />
+          <span class="setting-label">{t.blockSettings.blockTitle}</span>
+          <input bind:value={settingsTitle} placeholder={t.blockSettings.titlePlaceholder} onkeydown={onBlockSettingsKeydown} use:autofocus />
         </label>
         <label class="field">
-          <span class="setting-label">Description</span>
-          <input bind:value={settingsDescription} placeholder="Optional" onkeydown={onBlockSettingsKeydown} />
+          <span class="setting-label">{t.blockSettings.description}</span>
+          <input bind:value={settingsDescription} placeholder={t.blockSettings.optional} onkeydown={onBlockSettingsKeydown} />
         </label>
         <fieldset class="field">
-          <legend class="setting-label">Link style</legend>
+          <legend class="setting-label">{t.blockSettings.linkStyle}</legend>
           <div class="seg">
             {#each LINK_STYLE_OPTIONS as style (style)}
               <button type="button" class:sel={settingsLinkStyle === style} onclick={() => (settingsLinkStyle = style)}>
-                {LINK_STYLE_LABEL[style]}
+                {t.linkStyle[style]}
               </button>
             {/each}
           </div>
         </fieldset>
         <fieldset class="field">
-          <legend class="setting-label">Favicon size</legend>
+          <legend class="setting-label">{t.blockSettings.faviconSize}</legend>
           <div class="seg">
             {#each FAVICON_SIZE_OPTIONS as size (size)}
               <button type="button" class:sel={settingsFaviconSize === size} onclick={() => (settingsFaviconSize = size)}>
-                {FAVICON_SIZE_LABEL[size]}
+                {t.faviconSize[size]}
               </button>
             {/each}
           </div>
-          {#if settingsLinkStyle === "tiles"}<span class="help-note">Tiles always use a large icon.</span>{/if}
+          {#if settingsLinkStyle === "tiles"}<span class="help-note">{t.blockSettings.tilesNote}</span>{/if}
         </fieldset>
         <div class="field">
-          <span class="setting-label">Preview</span>
+          <span class="setting-label">{t.blockSettings.preview}</span>
           <div class="preview">
             <div class="links links-{settingsLinkStyle}">
               {#each [{ id: "p1", title: "GitHub", url: "https://github.com" }, { id: "p2", title: "Hacker News", url: "https://news.ycombinator.com" }, { id: "p3", title: "Il Post", url: "https://www.ilpost.it" }] as sample (sample.id)}
@@ -2285,8 +2276,8 @@
         </div>
       </div>
       <div class="dialog-foot">
-        <button type="button" class="btn ghost" onclick={closeBlockSettings}>Cancel</button>
-        <button type="button" class="btn primary" onclick={saveBlockSettings}>Save</button>
+        <button type="button" class="btn ghost" onclick={closeBlockSettings}>{t.common.cancel}</button>
+        <button type="button" class="btn primary" onclick={saveBlockSettings}>{t.common.save}</button>
       </div>
     </div>
   </div>
@@ -2301,31 +2292,31 @@
       if (e.target === e.currentTarget) closeLinkSettings();
     }}
   >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit link" tabindex="-1">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label={t.linkSettings.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Edit link</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeLinkSettings}>{@html icon("x")}</button>
+        <h2>{t.linkSettings.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeLinkSettings}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
         {#if link}
           <div class="link-icon-row">
             {@render favicon(link, 40)}
             <span class="link-icon-meta">
-              <b>{link.favicon ? "Custom icon" : "Letter tile"}</b>
-              <span class="help-note">{link.favicon ? "Stored with your data, works offline." : "Upload a small image to use your own icon."}</span>
+              <b>{link.favicon ? t.linkSettings.customIcon : t.linkSettings.letterTile}</b>
+              <span class="help-note">{link.favicon ? t.linkSettings.customIconNote : t.linkSettings.letterTileNote}</span>
             </span>
-            <button type="button" class="btn sm" onclick={pickLinkFavicon}>{@html icon("upload")} {link.favicon ? "Change" : "Upload icon"}</button>
+            <button type="button" class="btn sm" onclick={pickLinkFavicon}>{@html icon("upload")} {link.favicon ? t.linkSettings.change : t.linkSettings.uploadIcon}</button>
             {#if link.favicon}
-              <button type="button" class="btn sm danger" onclick={removeLinkFavicon}>Remove</button>
+              <button type="button" class="btn sm danger" onclick={removeLinkFavicon}>{t.common.remove}</button>
             {/if}
           </div>
         {/if}
         <label class="field">
-          <span class="setting-label">Title</span>
-          <input bind:value={linkSettingsTitle} placeholder="Title…" onkeydown={onLinkSettingsKeydown} use:autofocus />
+          <span class="setting-label">{t.linkSettings.linkTitle}</span>
+          <input bind:value={linkSettingsTitle} placeholder={t.linkSettings.titlePlaceholder} onkeydown={onLinkSettingsKeydown} use:autofocus />
         </label>
         <label class="field">
-          <span class="setting-label">URL</span>
+          <span class="setting-label">{t.linkSettings.url}</span>
           <input bind:value={linkSettingsUrl} placeholder="https://…" onkeydown={onLinkSettingsKeydown} />
         </label>
       </div>
@@ -2333,10 +2324,10 @@
         {#if link && linkSettingsColumnId && linkSettingsBlockId}
           {@const columnId = linkSettingsColumnId}
           {@const blockId = linkSettingsBlockId}
-          <button type="button" class="btn danger push-right" onclick={() => onDeleteLink(columnId, blockId, link)}>{@html icon("trash")} Delete</button>
+          <button type="button" class="btn danger push-right" onclick={() => onDeleteLink(columnId, blockId, link)}>{@html icon("trash")} {t.common.delete}</button>
         {/if}
-        <button type="button" class="btn ghost" onclick={closeLinkSettings}>Cancel</button>
-        <button type="button" class="btn primary" onclick={saveLinkSettings}>Save</button>
+        <button type="button" class="btn ghost" onclick={closeLinkSettings}>{t.common.cancel}</button>
+        <button type="button" class="btn primary" onclick={saveLinkSettings}>{t.common.save}</button>
       </div>
     </div>
   </div>
@@ -2350,16 +2341,13 @@
       if (e.target === e.currentTarget) closeBookmarksPicker();
     }}
   >
-    <div class="dialog wide" role="dialog" aria-modal="true" aria-label="Import browser bookmarks" tabindex="-1">
+    <div class="dialog wide" role="dialog" aria-modal="true" aria-label={t.bookmarks.title} tabindex="-1">
       <div class="dialog-head">
-        <h2>Import browser bookmarks</h2>
-        <button class="icon-btn" aria-label="Close" onclick={closeBookmarksPicker}>{@html icon("x")}</button>
+        <h2>{t.bookmarks.title}</h2>
+        <button class="icon-btn" aria-label={t.common.close} onclick={closeBookmarksPicker}>{@html icon("x")}</button>
       </div>
       <div class="dialog-body">
-        <p class="help-note">
-          Each top-level folder becomes a new workspace and its subfolders become blocks. Uncheck anything you want to
-          leave out. Your current workspaces are not changed.
-        </p>
+        <p class="help-note">{t.bookmarks.intro}</p>
         <div class="bookmarks-picker">
           {#each bookmarksFolders as row (folderPathKey(row.path))}
             {@const pruned = bookmarksFolderPruned(row.path)}
@@ -2379,24 +2367,23 @@
         {#if bookmarksFolders.length > 0}
           <label class="check-row">
             <input type="checkbox" bind:checked={bookmarksIncludeUngroupedBlock} />
-            Put a folder's loose links in a “{DEFAULT_UNGROUPED_BLOCK_TITLE}” block
+            {t.bookmarks.ungroupedBlock(importTitles.ungroupedBlock)}
           </label>
         {/if}
         {#if bookmarksHasRootLinks}
           <label class="check-row">
             <input type="checkbox" bind:checked={bookmarksIncludeRootLinks} />
-            Import the {bookmarksRootLinkCount} {bookmarksRootLinkCount === 1 ? "link" : "links"} outside any folder as a
-            “{DEFAULT_BOOKMARKS_WORKSPACE_TITLE}” workspace
+            {t.bookmarks.rootLinks(bookmarksRootLinkCount, importTitles.workspace)}
           </label>
         {/if}
       </div>
       <div class="dialog-foot">
         <span class="help-note push-right">
-          {bookmarksWorkspaceCount} {bookmarksWorkspaceCount === 1 ? "workspace" : "workspaces"} will be added
+          {t.bookmarks.willBeAdded(bookmarksWorkspaceCount)}
         </span>
-        <button type="button" class="btn ghost" onclick={closeBookmarksPicker}>Cancel</button>
+        <button type="button" class="btn ghost" onclick={closeBookmarksPicker}>{t.common.cancel}</button>
         <button type="button" class="btn primary" onclick={confirmBookmarksImport} disabled={!bookmarksCanConfirm}>
-          Import
+          {t.common.import}
         </button>
       </div>
     </div>
@@ -2410,7 +2397,7 @@
       <div class="dialog-head"><h2>{dialog.title}</h2></div>
       <div class="dialog-body"><p class="dialog-text">{dialog.text}</p></div>
       <div class="dialog-foot">
-        <button type="button" class="btn ghost" onclick={() => (confirmDialog = null)}>Cancel</button>
+        <button type="button" class="btn ghost" onclick={() => (confirmDialog = null)}>{t.common.cancel}</button>
         <button
           type="button"
           class="btn primary"
@@ -2426,15 +2413,15 @@
 
 {#if paletteOpen}
   <div class="scrim palette-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && closePalette()}>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Quick actions">
+    <div class="palette" role="dialog" aria-modal="true" aria-label={t.palette.label}>
       <div class="palette-input">
         {@html icon("search")}
         <input
           bind:value={paletteQuery}
           oninput={() => (paletteSel = 0)}
           onkeydown={onPaletteKeydown}
-          placeholder="Search links, workspaces, actions or the web"
-          aria-label="Quick actions"
+          placeholder={t.palette.placeholder}
+          aria-label={t.palette.label}
           autocomplete="off"
           use:autofocus
         />
@@ -2444,10 +2431,10 @@
         {@render resultList(paletteResults, paletteSel, runPaletteResult)}
       </div>
       <div class="palette-foot">
-        <span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
-        <span><kbd>↵</kbd> open</span>
-        <span><kbd>/</kbd> focus search</span>
-        <span><kbd>Alt</kbd> + <kbd>1</kbd>…<kbd>9</kbd> workspaces</span>
+        <span><kbd>↑</kbd> <kbd>↓</kbd> {t.palette.move}</span>
+        <span><kbd>↵</kbd> {t.palette.open}</span>
+        <span><kbd>/</kbd> {t.palette.focusSearch}</span>
+        <span><kbd>Alt</kbd> + <kbd>1</kbd>…<kbd>9</kbd> {t.palette.workspaces}</span>
       </div>
     </div>
   </div>
@@ -2458,7 +2445,7 @@
     <div class="toast" role="status">
       <span class="toast-msg">{toast.message}</span>
       {#if toast.undo}
-        <button onclick={() => undoToast(toast.id)}>{@html icon("undo")} Undo</button>
+        <button onclick={() => undoToast(toast.id)}>{@html icon("undo")} {t.toast.undo}</button>
       {/if}
     </div>
   {/each}

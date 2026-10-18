@@ -1,4 +1,5 @@
 import { createDefaultState, importState, serialize } from "./core";
+import { StargateError } from "./errors";
 import type { StargateState } from "./types";
 
 export const STORAGE_KEY = "stargate.v1";
@@ -65,7 +66,7 @@ export function isQuotaError(e: unknown): boolean {
 }
 
 function quotaMessage(context: string): Error {
-  return new Error(`Storage is full — remove a background or export a backup (${context}).`);
+  return new StargateError("storage-full", `Storage is full — remove a background or export a backup (${context}).`);
 }
 
 /**

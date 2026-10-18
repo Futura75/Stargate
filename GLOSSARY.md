@@ -67,8 +67,12 @@ The global light/dark/system appearance setting.
 _Avoid_: Mode, appearance
 
 **Settings**:
-The global configuration: theme, search engine, favicon source, and startup behavior.
+The global configuration: theme, language, search engine, favicon source, and startup behavior.
 _Avoid_: Preferences, options, config
+
+**Language**:
+The UI language setting (`it` or `en`, default `it`). It also decides the names of content the app creates on its own (seed workspace, default kanban columns, bookmark-import blocks); it never renames existing content. Synced like the other settings.
+_Avoid_: Locale (as a setting name), translation
 
 **Startup behavior**:
 The setting that decides which workspace opens on load: the first workspace (`first`, default) or the last active one (`last`, remembered from `lastWorkspaceId`).

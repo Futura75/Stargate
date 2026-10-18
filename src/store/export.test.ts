@@ -117,7 +117,7 @@ describe("importState", () => {
     s = moveWorkspace(s, play, 0);
 
     const imported = importState(exportState(s, "2026-01-01T00:00:00.000Z"));
-    expect(imported.workspaces.map((w) => w.name)).toEqual(["Play", "Personal", "Work"]);
+    expect(imported.workspaces.map((w) => w.name)).toEqual(["Play", "Personale", "Work"]);
     expect(imported).toEqual(s);
   });
 

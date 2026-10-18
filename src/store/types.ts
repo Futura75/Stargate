@@ -4,11 +4,14 @@ export type FaviconSource = "off" | "google-s2" | "duckduckgo";
 export type FaviconSize = "sm" | "md" | "lg";
 export type BlockTitleSize = "sm" | "md" | "lg";
 export type LinkStyle = "list" | "detail" | "tiles";
+export type Language = "it" | "en";
 
 export interface Settings {
   theme: Theme;
   searchEngine: SearchEngine;
   faviconSource: FaviconSource;
+  /** UI language; absent in files from older versions, which means the default (Italian). */
+  language?: Language;
   /** Which workspace to open on load: the first one, or the last active one. */
   openWorkspace?: "first" | "last";
   /** The workspace id to restore when `openWorkspace` is "last". */

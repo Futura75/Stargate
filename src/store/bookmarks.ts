@@ -1,5 +1,7 @@
-import type { Block, Link, StargateState, Workspace } from "./types";
-import { DEFAULT_BLOCK_TITLE_SIZE, DEFAULT_LINK_STYLE, DEFAULT_WORKSPACE_LAYOUT, newId, newWorkspace } from "./core";
+import type { Block, Language, Link, StargateState, Workspace } from "./types";
+import { DEFAULT_LANGUAGE, messagesFor } from "../i18n";
+import { DEFAULT_BLOCK_TITLE_SIZE, DEFAULT_LINK_STYLE, DEFAULT_WORKSPACE_LAYOUT, languageOf, newId, newWorkspace } from "./core";
+import { StargateError } from "./errors";
 
 /** A parsed bookmark link: title + URL, entities already decoded. */
 export interface BookmarksLink {
@@ -96,12 +98,25 @@ export interface BookmarksSelection {
   includeUngroupedBlock?: boolean;
 }
 
-/** Title of the synthetic block that collects a folder's ungrouped links. */
-export const DEFAULT_UNGROUPED_BLOCK_TITLE = "Generali";
-/** Title of the synthetic workspace that collects root-level loose links. */
-export const DEFAULT_BOOKMARKS_WORKSPACE_TITLE = "Segnalibri";
-/** Title of the single column every imported workspace gets. */
-export const DEFAULT_BOOKMARKS_COLUMN_TITLE = "Links";
+/** Titles of the synthetic block/workspace/column an import creates, in the given language. */
+export function bookmarksImportTitles(language: Language = DEFAULT_LANGUAGE) {
+  const seed = messagesFor(language).seed;
+  return {
+    /** Title of the synthetic block that collects a folder's ungrouped links. */
+    ungroupedBlock: seed.bookmarksUngroupedBlock,
+    /** Title of the synthetic workspace that collects root-level loose links. */
+    workspace: seed.bookmarksWorkspace,
+    /** Title of the single column every imported workspace gets. */
+    column: seed.bookmarksColumn,
+  };
+}
+
+type ImportTitles = ReturnType<typeof bookmarksImportTitles>;
+
+/** The import titles in the default language. */
+export const DEFAULT_UNGROUPED_BLOCK_TITLE = bookmarksImportTitles().ungroupedBlock;
+export const DEFAULT_BOOKMARKS_WORKSPACE_TITLE = bookmarksImportTitles().workspace;
+export const DEFAULT_BOOKMARKS_COLUMN_TITLE = bookmarksImportTitles().column;
 
 /** Appearance of imported workspaces: a neutral icon/color, like a hand-made one. */
 const IMPORTED_WORKSPACE_ICON = "✨";
@@ -125,7 +140,7 @@ export function parseBookmarksHtml(html: string): BookmarksTree {
   const tokens = tokenize(html);
   const listCount = assertBalancedLists(tokens);
   if (listCount === 0) {
-    throw new Error("not a Netscape bookmarks file: no <DL> list found");
+    throw new StargateError("invalid-bookmarks", "not a Netscape bookmarks file: no <DL> list found");
   }
   const root: BookmarksEntry[] = [];
   parseList(tokens, 0, root, []);
@@ -156,17 +171,19 @@ export function importBookmarksFromTree(
 
   const excluded = new Set(selection.excludedFolders);
   const includeUngroupedBlock = selection.includeUngroupedBlock ?? true;
+  const language = languageOf(state.settings);
+  const titles = bookmarksImportTitles(language);
 
   for (const entry of tree.entries) {
     if (entry.type !== "folder" || excluded.has(folderPathKey(entry.path))) continue;
-    const workspace = folderToWorkspace(entry, usedNames, excluded, includeUngroupedBlock);
+    const workspace = folderToWorkspace(entry, usedNames, excluded, includeUngroupedBlock, titles, language);
     if (workspace) newWorkspaces.push(workspace);
   }
 
   if (selection.includeRootLinks) {
     const looseLinks = tree.entries.filter((e): e is BookmarksLink => e.type === "link");
     if (looseLinks.length > 0) {
-      newWorkspaces.push(rootLinksWorkspace(looseLinks, usedNames));
+      newWorkspaces.push(rootLinksWorkspace(looseLinks, usedNames, titles, language));
     }
   }
 
@@ -179,6 +196,8 @@ function folderToWorkspace(
   usedNames: Set<string>,
   excluded: Set<string>,
   includeUngroupedBlock: boolean,
+  titles: ImportTitles,
+  language: Language,
 ): Workspace | null {
   const blocks: Block[] = [];
   const looseLinks: Link[] = [];
@@ -192,7 +211,7 @@ function folderToWorkspace(
     }
   }
   if (includeUngroupedBlock && looseLinks.length > 0) {
-    blocks.push(makeBlock(DEFAULT_UNGROUPED_BLOCK_TITLE, looseLinks));
+    blocks.push(makeBlock(titles.ungroupedBlock, looseLinks));
   }
   if (blocks.length === 0) return null;
 
@@ -201,31 +220,38 @@ function folderToWorkspace(
       name: uniqueName(folder.name, usedNames),
       icon: IMPORTED_WORKSPACE_ICON,
       color: IMPORTED_WORKSPACE_COLOR,
-    }),
+    }, language),
     blocks,
+    titles,
   );
 }
 
 /** Workspace that collects the root-level loose links of the file. */
-function rootLinksWorkspace(links: BookmarksLink[], usedNames: Set<string>): Workspace {
-  const block = makeBlock(DEFAULT_UNGROUPED_BLOCK_TITLE, links.map(toLink));
+function rootLinksWorkspace(
+  links: BookmarksLink[],
+  usedNames: Set<string>,
+  titles: ImportTitles,
+  language: Language,
+): Workspace {
+  const block = makeBlock(titles.ungroupedBlock, links.map(toLink));
   return decorate(
     newWorkspace({
-      name: uniqueName(DEFAULT_BOOKMARKS_WORKSPACE_TITLE, usedNames),
+      name: uniqueName(titles.workspace, usedNames),
       icon: IMPORTED_WORKSPACE_ICON,
       color: IMPORTED_WORKSPACE_COLOR,
-    }),
+    }, language),
     [block],
+    titles,
   );
 }
 
 /** Applies the single Links column and the app's default appearance/layout/title size. */
-function decorate(workspace: Workspace, blocks: Block[]): Workspace {
+function decorate(workspace: Workspace, blocks: Block[], titles: ImportTitles): Workspace {
   return {
     ...workspace,
     layout: { ...DEFAULT_WORKSPACE_LAYOUT },
     blockTitleSize: DEFAULT_BLOCK_TITLE_SIZE,
-    columns: [{ id: newId(), title: DEFAULT_BOOKMARKS_COLUMN_TITLE, blocks }],
+    columns: [{ id: newId(), title: titles.column, blocks }],
   };
 }
 
@@ -286,13 +312,13 @@ function tokenize(html: string): Token[] {
 
     if (html.startsWith("<!--", lt)) {
       const end = html.indexOf("-->", lt + 4);
-      if (end === -1) throw new Error("malformed bookmarks file: unterminated comment");
+      if (end === -1) throw new StargateError("invalid-bookmarks", "malformed bookmarks file: unterminated comment");
       i = end + 3;
       continue;
     }
 
     const gt = findTagEnd(html, lt);
-    if (gt === -1) throw new Error("malformed bookmarks file: unterminated tag");
+    if (gt === -1) throw new StargateError("invalid-bookmarks", "malformed bookmarks file: unterminated tag");
     const inner = html.slice(lt + 1, gt);
 
     if (inner.startsWith("!") || inner.startsWith("?")) {
@@ -343,10 +369,10 @@ function assertBalancedLists(tokens: Token[]): number {
       opens++;
     } else if (t.kind === "close" && t.tag === "dl") {
       depth--;
-      if (depth < 0) throw new Error("malformed bookmarks file: unexpected </DL>");
+      if (depth < 0) throw new StargateError("invalid-bookmarks", "malformed bookmarks file: unexpected </DL>");
     }
   }
-  if (depth !== 0) throw new Error("malformed bookmarks file: unbalanced <DL>/</DL>");
+  if (depth !== 0) throw new StargateError("invalid-bookmarks", "malformed bookmarks file: unbalanced <DL>/</DL>");
   return opens;
 }
 
@@ -436,7 +462,7 @@ function readElementText(tokens: Token[], start: number, tag: string): { text: s
     if (t.kind === "close" && t.tag === tag) return { text, next: i + 1 };
     i++;
   }
-  throw new Error(`malformed bookmarks file: unclosed <${tag.toUpperCase()}>`);
+  throw new StargateError("invalid-bookmarks", `malformed bookmarks file: unclosed <${tag.toUpperCase()}>`);
 }
 
 /** Value of the `HREF` attribute (entities decoded by the caller); empty when absent. */

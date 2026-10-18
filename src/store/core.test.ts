@@ -26,17 +26,18 @@ describe("createDefaultState", () => {
       theme: "system",
       searchEngine: "google",
       faviconSource: "off",
+      language: "it",
       openWorkspace: "first",
     });
     expect(s.workspaces).toHaveLength(1);
 
     const w = s.workspaces[0];
-    expect(w.name).toBe("Personal");
+    expect(w.name).toBe("Personale");
     expect(w.background).toEqual({ dataUrl: null, alpha: 70 });
-    expect(w.kanban.columns.map((c) => c.title)).toEqual(["Todo", "In Progress", "Done"]);
+    expect(w.kanban.columns.map((c) => c.title)).toEqual(["Da fare", "In corso", "Fatto"]);
     expect(w.columns).toHaveLength(1);
-    expect(w.columns[0].title).toBe("Getting started");
-    expect(w.columns[0].blocks[0].title).toBe("Welcome");
+    expect(w.columns[0].title).toBe("Per iniziare");
+    expect(w.columns[0].blocks[0].title).toBe("Benvenuto");
     expect(w.columns[0].blocks[0].links[0]).toMatchObject({
       title: "Stargate repo",
       url: "https://github.com/Futura75/Stargate",
@@ -73,7 +74,7 @@ describe("addWorkspace", () => {
     expect(w.icon).toBe("🧪");
     expect(w.color).toBe("#2e6da3");
     expect(w.columns).toEqual([]);
-    expect(w.kanban.columns.map((c) => c.title)).toEqual(["Todo", "In Progress", "Done"]);
+    expect(w.kanban.columns.map((c) => c.title)).toEqual(["Da fare", "In corso", "Fatto"]);
   });
 });
 
@@ -84,7 +85,7 @@ describe("addColumn / addBlock / addLink", () => {
 
     const withCol = addColumn(s, ws, "Tools");
     const colId = withCol.workspaces[0].columns[1].id;
-    expect(withCol.workspaces[0].columns.map((c) => c.title)).toEqual(["Getting started", "Tools"]);
+    expect(withCol.workspaces[0].columns.map((c) => c.title)).toEqual(["Per iniziare", "Tools"]);
 
     const withBlock = addBlock(withCol, ws, colId, "Dev");
     expect(withBlock.workspaces[0].columns[1].blocks.map((b) => b.title)).toEqual(["Dev"]);
@@ -136,7 +137,7 @@ describe("moveWorkspace", () => {
     const f = workspaceFixture();
     const next = moveWorkspace(f.s, f.play, 0);
     expect(next).not.toBe(f.s);
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Play", "Personal", "Work"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Play", "Personale", "Work"]);
   });
 
   it("leaves the other workspaces untouched", () => {
@@ -154,7 +155,7 @@ describe("moveWorkspace", () => {
     const f = workspaceFixture();
     const next = moveWorkspace(f.s, f.work, 1);
     expect(next).not.toBe(f.s);
-    expect(next.workspaces.map((w) => w.name)).toEqual(["Personal", "Work", "Play"]);
+    expect(next.workspaces.map((w) => w.name)).toEqual(["Personale", "Work", "Play"]);
   });
 
   it("is a same-reference no-op when the workspace id is missing", () => {
