@@ -23,6 +23,12 @@ export const en = {
   linkStyle: { list: "List", detail: "Detail", tiles: "Tiles" },
   titleSize: { sm: "Small", md: "Medium", lg: "Large" },
   openWorkspace: { first: "First workspace", last: "Last used" },
+  skinNote: {
+    salvia: "The original soft sage look.",
+    giardino: "Flat colour lobes on a cream map ground, capsule controls.",
+    atlante: "Star-chart paper: hairline plates, italic serif names, night-vision red.",
+    reticolo: "Visible construction grid, square cells, one cobalt plane.",
+  },
 
   syncStatus: {
     off: "Not signed in.",
@@ -179,6 +185,7 @@ export const en = {
     appearance: "Appearance",
     theme: "Theme",
     language: "Language",
+    look: "Look",
     blockTitles: "Block titles",
     layout: (workspace: string) => `Layout · ${workspace}`,
     columns: "Columns",
@@ -191,7 +198,8 @@ export const en = {
     defaultEngine: "Default engine",
     favicons: "Favicons",
     fetchIconsFrom: "Fetch site icons from",
-    faviconsNote: "Off by default: the provider would see the list of sites you bookmark. Letter tiles always work offline.",
+    faviconsNote:
+      "On by default for new links: the chosen provider would see the list of sites you bookmark. Turn this off for full privacy — letter tiles always work offline.",
     onStartup: "On startup",
     open: "Open",
     sync: "Sync",

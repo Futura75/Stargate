@@ -23,6 +23,12 @@ export const it: Messages = {
   linkStyle: { list: "Elenco", detail: "Dettaglio", tiles: "Riquadri" },
   titleSize: { sm: "Piccoli", md: "Medi", lg: "Grandi" },
   openWorkspace: { first: "Primo workspace", last: "Ultimo usato" },
+  skinNote: {
+    salvia: "L'aspetto originale, morbido color salvia.",
+    giardino: "Lobi di colore piatti su un fondo crema da mappa, controlli a capsula.",
+    atlante: "Carta da mappa stellare: tavole a filo sottile, nomi in serif corsivo, rosso per la visione notturna.",
+    reticolo: "Griglia di costruzione visibile, celle quadrate, un unico piano cobalto.",
+  },
 
   syncStatus: {
     off: "Accesso non effettuato.",
@@ -180,6 +186,7 @@ export const it: Messages = {
     appearance: "Aspetto",
     theme: "Tema",
     language: "Lingua",
+    look: "Stile",
     blockTitles: "Titoli dei blocchi",
     layout: (workspace: string) => `Layout · ${workspace}`,
     columns: "Colonne",
@@ -193,7 +200,7 @@ export const it: Messages = {
     favicons: "Favicon",
     fetchIconsFrom: "Scarica le icone dei siti da",
     faviconsNote:
-      "Disattivate di default: il fornitore vedrebbe l'elenco dei siti nei tuoi segnalibri. Le icone con l'iniziale funzionano sempre offline.",
+      "Attive di default per i nuovi link: il fornitore scelto vedrebbe l'elenco dei siti nei tuoi segnalibri. Disattivale per la massima privacy — le icone con l'iniziale funzionano sempre offline.",
     onStartup: "All'avvio",
     open: "Apri",
     sync: "Sincronizzazione",

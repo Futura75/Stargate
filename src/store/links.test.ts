@@ -184,7 +184,7 @@ describe("move", () => {
 
   it("moves a link between blocks", () => {
     const f = fixture();
-    let s = addLink(f.s, f.ws1, f.colA, f.blkB, "https://news.ycombinator.com HN");
+    const s = addLink(f.s, f.ws1, f.colA, f.blkB, "https://news.ycombinator.com HN");
     const next = moveLink(s, f.ws1, f.colA, f.colA, f.blkA, f.blkB, f.link2, 1);
     expect(next.workspaces[0].columns[0].blocks[0].links.map((l) => l.title)).toEqual([
       "Stargate repo",

@@ -23,12 +23,16 @@ A single bookmark: a title and a URL, optionally with a stored favicon.
 _Avoid_: Bookmark, tile, shortcut, entry
 
 **Favicon**:
-A small icon for a link, stored as a normalized 32×32 PNG data URL. When absent, a letter tile is shown.
+A small icon for a link, stored as a normalized 32×32 PNG data URL. Only ever set by a manual upload — an auto-resolved remote favicon is never stored this way (see **remote favicon probe**). When absent and no remote favicon resolves, a letter tile is shown.
 _Avoid_: Icon (reserved for the workspace's own icon)
 
 **Letter tile**:
 A generated fallback: the first letter of a link's domain on a background hue derived from that domain. Always present as the base layer.
 _Avoid_: Monogram, avatar, placeholder
+
+**Remote favicon probe**:
+The automatic, unstored check that loads a link's favicon from the chosen remote provider (Google S2 or DuckDuckGo) and confirms it's a real site icon rather than the provider's generic "globe" placeholder, by comparing the loaded image's pixel dimensions against each provider's known placeholder size. Runs once per domain per session (not persisted, not on every render) as soon as a link appears; falls back to the letter tile on failure or a placeholder match. Governed by the `faviconSource` setting, which defaults to on (`google-s2`).
+_Avoid_: Favicon fetch, icon check
 
 **Link style**:
 A per-block rendering mode for a block's links: `list` (favicon + title in rows), `detail` (favicon + title + URL second line), or `tiles` (large favicon + centered label). Defaults to `list`.

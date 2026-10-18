@@ -25,7 +25,7 @@ describe("createDefaultState", () => {
     expect(s.settings).toEqual({
       theme: "system",
       searchEngine: "google",
-      faviconSource: "off",
+      faviconSource: "google-s2",
       language: "it",
       openWorkspace: "first",
     });

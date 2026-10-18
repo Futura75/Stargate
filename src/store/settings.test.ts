@@ -20,7 +20,7 @@ describe("setSearchEngine", () => {
     expect(next.settings).toEqual({
       theme: "system",
       searchEngine: engine,
-      faviconSource: "off",
+      faviconSource: "google-s2",
       language: "it",
       openWorkspace: "first",
     });
@@ -36,7 +36,13 @@ describe("setTheme", () => {
     const s = state();
     const next = setTheme(s, theme);
     expect(next.settings.theme).toBe(theme);
-    expect(next.settings).toEqual({ theme, searchEngine: "google", faviconSource: "off", language: "it", openWorkspace: "first" });
+    expect(next.settings).toEqual({
+      theme,
+      searchEngine: "google",
+      faviconSource: "google-s2",
+      language: "it",
+      openWorkspace: "first",
+    });
     expect(s.settings.theme).toBe("system");
     expect(next).not.toBe(s);
     expect(next.settings).not.toBe(s.settings);

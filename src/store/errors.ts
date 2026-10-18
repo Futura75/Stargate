@@ -15,8 +15,8 @@ export type ErrorCode =
 export class StargateError extends Error {
   readonly code: ErrorCode;
 
-  constructor(code: ErrorCode, message: string) {
-    super(message);
+  constructor(code: ErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "StargateError";
     this.code = code;
   }
