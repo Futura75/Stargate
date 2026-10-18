@@ -13,6 +13,8 @@ export default tseslint.config(
       ".scratch/**",
       "prototype/**",
       ".claude/**",
+      // Vendored agent-skill scripts (incl. minified bundles), not app code.
+      ".github/skills/**",
     ],
   },
   js.configs.recommended,
